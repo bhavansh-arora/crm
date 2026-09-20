@@ -108,14 +108,14 @@ export default function NewLeadForm() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Deal value ($)">
+          <Field label="Deal value (₹)">
             <input
               type="number"
               min={0}
               value={form.value}
               onChange={(e) => update("value", e.target.value)}
               className="input"
-              placeholder="5000"
+              placeholder="50000"
             />
           </Field>
           <Field label="Status">
