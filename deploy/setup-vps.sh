@@ -78,14 +78,21 @@ if [ ! -f .env ]; then
     SITE_URL="http://$SERVER_IP"
   fi
 
-  # DB_URL may contain '#' or other sed-unfriendly characters; use '|' as the
-  # sed delimiter instead of the '#' used for the other substitutions.
-  sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"$DB_URL\"|" .env
-  sed -i "s#^NEXTAUTH_SECRET=.*#NEXTAUTH_SECRET=\"$NEXTAUTH_SECRET\"#" .env
-  sed -i "s#^NEXTAUTH_URL=.*#NEXTAUTH_URL=\"$SITE_URL\"#" .env
-  sed -i "s#^SEED_ADMIN_EMAIL=.*#SEED_ADMIN_EMAIL=\"$ADMIN_EMAIL\"#" .env
-  sed -i "s#^SEED_ADMIN_PASSWORD=.*#SEED_ADMIN_PASSWORD=\"$ADMIN_PASSWORD\"#" .env
-  sed -i "s#^CRON_SECRET=.*#CRON_SECRET=\"$CRON_SECRET\"#" .env
+  # Not sed: a Postgres connection string routinely contains '&' (e.g. Neon's
+  # "...?channel_binding=require&sslmode=require"), and sed's replacement
+  # text treats an unescaped '&' as "insert the matched text here" — that
+  # silently corrupts the line instead of writing the URL. awk -v passes
+  # values through literally with no such special-character handling.
+  set_env() {
+    awk -v k="$1" -v v="$2" 'BEGIN{FS="="} $1==k {print k"=\""v"\""; next} {print}' .env > .env.tmp
+    mv .env.tmp .env
+  }
+  set_env DATABASE_URL "$DB_URL"
+  set_env NEXTAUTH_SECRET "$NEXTAUTH_SECRET"
+  set_env NEXTAUTH_URL "$SITE_URL"
+  set_env SEED_ADMIN_EMAIL "$ADMIN_EMAIL"
+  set_env SEED_ADMIN_PASSWORD "$ADMIN_PASSWORD"
+  set_env CRON_SECRET "$CRON_SECRET"
 
   if [ -n "$DOMAIN" ]; then
     printf '%s {\n\treverse_proxy app:3000\n}\n' "$DOMAIN" > Caddyfile
