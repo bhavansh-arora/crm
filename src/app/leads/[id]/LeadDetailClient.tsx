@@ -7,15 +7,20 @@ import { useSession } from "next-auth/react";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatCurrency, formatDateTime, durationSince, relativeTime } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
+import TemperatureBadge from "@/components/TemperatureBadge";
 import {
   LEAD_STATUSES,
   LEAD_STATUS_LABELS,
+  LEAD_TEMPERATURES,
+  LEAD_TEMPERATURE_LABELS,
   CALL_OUTCOMES,
   CALL_OUTCOME_LABELS,
   CALL_OUTCOME_COLORS,
+  PAYMENT_LINK_STATUS_LABELS,
+  PAYMENT_LINK_STATUS_COLORS,
   type CallOutcomeValue,
 } from "@/lib/constants";
-import type { LeadDetail, TeamMember } from "@/types/models";
+import type { LeadDetail, TeamMember, LeadSource } from "@/types/models";
 
 type ComposerMode = null | "note" | "call" | "followup";
 
@@ -30,6 +35,8 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
   );
   const { data: teamData } = useSWR<{ users: TeamMember[] }>(isAdmin ? "/api/users" : null, fetcher);
   const reps = (teamData?.users || []).filter((u) => u.role === "SALES_REP" && u.active);
+  const { data: sourcesData } = useSWR<{ sources: LeadSource[] }>(isAdmin ? "/api/sources" : null, fetcher);
+  const activeSources = (sourcesData?.sources || []).filter((s) => s.active);
 
   const [composer, setComposer] = useState<ComposerMode>(null);
   const [editing, setEditing] = useState(false);
@@ -73,6 +80,19 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
     }
   }
 
+  async function changeTemperature(temperature: string) {
+    setBusy(true);
+    setFormError(null);
+    try {
+      await apiRequest(`/api/leads/${leadId}`, "PATCH", { temperature: temperature || null });
+      mutate();
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to update temperature");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteLead() {
     if (!confirm(`Delete ${lead.name}? This cannot be undone.`)) return;
     setBusy(true);
@@ -107,11 +127,14 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
             <h1 className="text-xl font-semibold text-slate-900">{lead.name}</h1>
             <p className="text-sm text-slate-500">{lead.company || "No company"}</p>
           </div>
-          <StatusBadge status={lead.status} />
+          <div className="flex items-center gap-2">
+            <TemperatureBadge temperature={lead.temperature} />
+            <StatusBadge status={lead.status} />
+          </div>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-          <Info label="Value" value={formatCurrency(lead.value)} />
+          <PitchedAmountEditor leadId={leadId} value={lead.value} busy={busy} onSaved={mutate} onError={setFormError} />
           <Info label="Phone" value={lead.phone || "—"} />
           <Info label="Email" value={lead.email || "—"} />
           <Info label="Source" value={lead.source || "—"} />
@@ -130,6 +153,24 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
               {LEAD_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {LEAD_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-slate-500">Temperature:</span>
+            <select
+              aria-label="Lead temperature"
+              value={lead.temperature || ""}
+              disabled={busy}
+              onChange={(e) => changeTemperature(e.target.value)}
+              className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">Not set</option>
+              {LEAD_TEMPERATURES.map((t) => (
+                <option key={t} value={t}>
+                  {LEAD_TEMPERATURE_LABELS[t]}
                 </option>
               ))}
             </select>
@@ -180,7 +221,12 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
         )}
 
         {editing && isAdmin && (
-          <EditLeadForm lead={lead} onSaved={() => { setEditing(false); mutate(); }} onError={setFormError} />
+          <EditLeadForm
+            lead={lead}
+            sources={activeSources}
+            onSaved={() => { setEditing(false); mutate(); }}
+            onError={setFormError}
+          />
         )}
       </div>
 
@@ -250,6 +296,9 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
         </ul>
       </div>
 
+      {/* Payments */}
+      <PaymentLinksSection lead={lead} onChanged={mutate} onError={setFormError} />
+
       {/* Activity timeline */}
       <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <div className="mb-3 flex items-center justify-between">
@@ -317,7 +366,7 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
                   </span>
                 )}
                 <span className="text-xs text-slate-400">
-                  {a.user?.name || "Unknown"} · {relativeTime(a.createdAt)}
+                  {a.user?.name || "Unknown"} · {formatDateTime(a.createdAt)} ({relativeTime(a.createdAt)})
                 </span>
               </div>
               {a.note && <p className="mt-1 text-sm text-slate-600">{a.note}</p>}
@@ -507,10 +556,12 @@ function FollowUpForm({
 
 function EditLeadForm({
   lead,
+  sources,
   onSaved,
   onError,
 }: {
   lead: LeadDetail;
+  sources: LeadSource[];
   onSaved: () => void;
   onError: (msg: string | null) => void;
 }) {
@@ -547,7 +598,24 @@ function EditLeadForm({
       <LabeledInput label="Email" value={form.email} onChange={(v) => update("email", v)} />
       <LabeledInput label="Phone" value={form.phone} onChange={(v) => update("phone", v)} />
       <LabeledInput label="Company" value={form.company} onChange={(v) => update("company", v)} />
-      <LabeledInput label="Source" value={form.source} onChange={(v) => update("source", v)} />
+      <div>
+        <label className="mb-1 block text-xs font-medium text-slate-500">Source</label>
+        <select
+          value={form.source}
+          onChange={(e) => update("source", e.target.value)}
+          className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+        >
+          <option value="">—</option>
+          {sources.map((s) => (
+            <option key={s.id} value={s.name}>
+              {s.name}
+            </option>
+          ))}
+          {form.source && !sources.some((s) => s.name === form.source) && (
+            <option value={form.source}>{form.source} (no longer in the list)</option>
+          )}
+        </select>
+      </div>
       <LabeledInput label="Value" value={form.value} onChange={(v) => update("value", v)} type="number" />
       <div className="sm:col-span-2">
         <button
@@ -558,6 +626,217 @@ function EditLeadForm({
           {loading ? "Saving…" : "Save changes"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function PitchedAmountEditor({
+  leadId,
+  value,
+  busy,
+  onSaved,
+  onError,
+}: {
+  leadId: string;
+  value: number;
+  busy: boolean;
+  onSaved: () => void;
+  onError: (msg: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [input, setInput] = useState(String(value));
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    onError(null);
+    try {
+      await apiRequest(`/api/leads/${leadId}`, "PATCH", { value: Number(input) || 0 });
+      setEditing(false);
+      onSaved();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to update amount");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div>
+        <p className="text-xs uppercase tracking-wide text-slate-400">Amount Pitched</p>
+        <button
+          onClick={() => {
+            setInput(String(value));
+            setEditing(true);
+          }}
+          className="truncate font-medium text-slate-800 underline decoration-dotted underline-offset-2 hover:text-brand-700"
+        >
+          {formatCurrency(value)}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <p className="mb-1 text-xs uppercase tracking-wide text-slate-400">Amount Pitched (₹)</p>
+      <div className="flex gap-1">
+        <input
+          type="number"
+          min={0}
+          autoFocus
+          value={input}
+          disabled={busy || saving}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && save()}
+          className="w-full min-w-0 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+        />
+        <button
+          onClick={save}
+          disabled={busy || saving}
+          className="shrink-0 rounded-lg bg-brand-600 px-2 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+        >
+          ✓
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PaymentLinksSection({
+  lead,
+  onChanged,
+  onError,
+}: {
+  lead: LeadDetail;
+  onChanged: () => void;
+  onError: (msg: string | null) => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  async function createLink() {
+    setCreating(true);
+    onError(null);
+    try {
+      await apiRequest(`/api/leads/${lead.id}/payment-links`, "POST", {
+        amount: Number(amount),
+        description,
+      });
+      setShowForm(false);
+      setAmount("");
+      setDescription("");
+      onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to create payment link");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function refresh(linkId: string) {
+    setBusyId(linkId);
+    onError(null);
+    try {
+      await apiRequest(`/api/payment-links/${linkId}/refresh`, "POST");
+      onChanged();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to check payment status");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-semibold text-slate-900">Payments</h2>
+        {!showForm && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100"
+          >
+            + Request payment
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <div className="mb-4 space-y-2 rounded-lg bg-slate-50 p-3">
+          <input
+            type="number"
+            min={0}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="Amount (₹)"
+            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+          />
+          <input
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What's this for? (e.g. Advance payment)"
+            className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+          />
+          <button
+            onClick={createLink}
+            disabled={creating || !amount || !description}
+            className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+          >
+            {creating ? "Creating…" : "Generate link"}
+          </button>
+        </div>
+      )}
+
+      {lead.paymentLinks.length === 0 && !showForm && (
+        <p className="text-sm text-slate-400">No payment links yet.</p>
+      )}
+
+      <ul className="space-y-2">
+        {lead.paymentLinks.map((p) => (
+          <li key={p.id} className="rounded-lg bg-slate-50 p-3 text-sm ring-1 ring-slate-100">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="font-medium text-slate-800">{formatCurrency(p.amount)}</span>{" "}
+                <span className="text-slate-500">— {p.description}</span>
+              </div>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${PAYMENT_LINK_STATUS_COLORS[p.status]}`}
+              >
+                {PAYMENT_LINK_STATUS_LABELS[p.status]}
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <a
+                href={p.shortUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-brand-700 underline"
+              >
+                {p.shortUrl}
+              </a>
+              <button
+                onClick={() => navigator.clipboard?.writeText(p.shortUrl)}
+                className="rounded-lg bg-white px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+              >
+                Copy
+              </button>
+              {p.status !== "PAID" && (
+                <button
+                  onClick={() => refresh(p.id)}
+                  disabled={busyId === p.id}
+                  className="rounded-lg bg-white px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-60"
+                >
+                  {busyId === p.id ? "Checking…" : "Check status"}
+                </button>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

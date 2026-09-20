@@ -22,6 +22,7 @@ export async function GET() {
         role: true,
         active: true,
         createdAt: true,
+        lastActiveAt: true,
         _count: { select: { leads: true } },
       },
       orderBy: { createdAt: "asc" },

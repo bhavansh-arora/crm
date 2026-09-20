@@ -63,3 +63,34 @@ export const CALL_OUTCOME_COLORS: Record<CallOutcomeValue, string> = {
   VOICEMAIL: "bg-blue-100 text-blue-700",
   CALLBACK_REQUESTED: "bg-purple-100 text-purple-700",
 };
+
+export const LEAD_TEMPERATURES = ["HOT", "WARM", "COLD"] as const;
+
+export type LeadTemperatureValue = (typeof LEAD_TEMPERATURES)[number];
+
+export const LEAD_TEMPERATURE_LABELS: Record<LeadTemperatureValue, string> = {
+  HOT: "🔥 Hot",
+  WARM: "☀️ Warm",
+  COLD: "❄️ Cold",
+};
+
+export const LEAD_TEMPERATURE_COLORS: Record<LeadTemperatureValue, string> = {
+  HOT: "bg-rose-100 text-rose-700 ring-rose-300",
+  WARM: "bg-amber-100 text-amber-700 ring-amber-300",
+  COLD: "bg-sky-100 text-sky-700 ring-sky-300",
+};
+
+export const PAYMENT_LINK_STATUSES = ["CREATED", "PAID", "EXPIRED", "CANCELLED"] as const;
+export type PaymentLinkStatusValue = (typeof PAYMENT_LINK_STATUSES)[number];
+export const PAYMENT_LINK_STATUS_LABELS: Record<PaymentLinkStatusValue, string> = {
+  CREATED: "Awaiting payment",
+  PAID: "Paid",
+  EXPIRED: "Expired",
+  CANCELLED: "Cancelled",
+};
+export const PAYMENT_LINK_STATUS_COLORS: Record<PaymentLinkStatusValue, string> = {
+  CREATED: "bg-amber-100 text-amber-700",
+  PAID: "bg-emerald-100 text-emerald-700",
+  EXPIRED: "bg-slate-100 text-slate-500",
+  CANCELLED: "bg-rose-100 text-rose-700",
+};

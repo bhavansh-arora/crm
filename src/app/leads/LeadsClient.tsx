@@ -4,20 +4,40 @@ import useSWR from "swr";
 import Link from "next/link";
 import { useState } from "react";
 import { fetcher } from "@/lib/fetcher";
-import { formatCurrency, relativeTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, relativeTime } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
-import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/lib/constants";
+import TemperatureBadge from "@/components/TemperatureBadge";
+import { LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_TEMPERATURES, LEAD_TEMPERATURE_LABELS } from "@/lib/constants";
 import type { LeadListItem, TeamMember } from "@/types/models";
+
+const QUICK_FILTERS = [
+  { value: "", label: "All" },
+  { value: "due_today", label: "Due Today" },
+  { value: "overdue", label: "Overdue" },
+  { value: "stale", label: "Status Stale" },
+] as const;
+
+const SORT_OPTIONS = [
+  { value: "updated_desc", label: "Recently updated" },
+  { value: "value_desc", label: "Highest value" },
+  { value: "stale_first", label: "Longest since status change" },
+] as const;
 
 export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
   const [status, setStatus] = useState("");
+  const [temperature, setTemperature] = useState("");
   const [assignedToId, setAssignedToId] = useState("");
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<string>("");
+  const [sort, setSort] = useState("updated_desc");
 
   const params = new URLSearchParams();
   if (status) params.set("status", status);
+  if (temperature) params.set("temperature", temperature);
   if (assignedToId) params.set("assignedToId", assignedToId);
   if (search) params.set("search", search);
+  if (filter) params.set("filter", filter);
+  if (sort) params.set("sort", sort);
 
   const { data, isLoading } = useSWR<{ leads: LeadListItem[] }>(
     `/api/leads?${params.toString()}`,
@@ -45,7 +65,23 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
         )}
       </div>
 
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+      <div className="mb-3 flex flex-wrap gap-2">
+        {QUICK_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setFilter(f.value)}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
+              filter === f.value
+                ? "bg-brand-600 text-white ring-brand-600"
+                : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -64,6 +100,18 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
             </option>
           ))}
         </select>
+        <select
+          value={temperature}
+          onChange={(e) => setTemperature(e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="">Any temperature</option>
+          {LEAD_TEMPERATURES.map((t) => (
+            <option key={t} value={t}>
+              {LEAD_TEMPERATURE_LABELS[t]}
+            </option>
+          ))}
+        </select>
         {isAdmin && (
           <select
             value={assignedToId}
@@ -79,6 +127,17 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
             ))}
           </select>
         )}
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          {SORT_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>
+              Sort: {s.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {isLoading && <p className="text-sm text-slate-500">Loading leads…</p>}
@@ -89,32 +148,42 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       <div className="grid grid-cols-1 gap-3">
-        {leads.map((lead) => (
-          <Link
-            key={lead.id}
-            href={`/leads/${lead.id}`}
-            className="block rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-medium text-slate-900">{lead.name}</p>
-                <p className="truncate text-sm text-slate-500">
-                  {lead.company || "—"} {lead.phone ? `· ${lead.phone}` : ""}
-                </p>
+        {leads.map((lead) => {
+          const nextFollowUp = lead.followUps[0];
+          const overdue = nextFollowUp && new Date(nextFollowUp.dueAt).getTime() < Date.now();
+          return (
+            <Link
+              key={lead.id}
+              href={`/leads/${lead.id}`}
+              className="block rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-900">{lead.name}</p>
+                  <p className="truncate text-sm text-slate-500">
+                    {lead.company || "—"} {lead.phone ? `· ${lead.phone}` : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <TemperatureBadge temperature={lead.temperature} />
+                  <StatusBadge status={lead.status} />
+                </div>
               </div>
-              <StatusBadge status={lead.status} />
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-              <span className="font-semibold text-slate-700">{formatCurrency(lead.value)}</span>
-              <span>{lead.assignedTo ? `👤 ${lead.assignedTo.name}` : "Unassigned"}</span>
-              <span>{lead._count.activities} activity log entries</span>
-              {lead._count.followUps > 0 && (
-                <span className="text-amber-600">⏰ {lead._count.followUps} open follow-up{lead._count.followUps > 1 ? "s" : ""}</span>
-              )}
-              <span className="ml-auto">Updated {relativeTime(lead.updatedAt)}</span>
-            </div>
-          </Link>
-        ))}
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                <span className="font-semibold text-slate-700">{formatCurrency(lead.value)}</span>
+                <span>{lead.assignedTo ? `👤 ${lead.assignedTo.name}` : "Unassigned"}</span>
+                <span>{lead._count.activities} activity log entries</span>
+                {nextFollowUp && (
+                  <span className={overdue ? "font-medium text-rose-600" : "text-amber-600"}>
+                    ⏰ {overdue ? "Overdue" : "Due"} {formatDateTime(nextFollowUp.dueAt)}
+                    {lead._count.followUps > 1 ? ` (+${lead._count.followUps - 1} more)` : ""}
+                  </span>
+                )}
+                <span className="ml-auto">Updated {relativeTime(lead.updatedAt)}</span>
+              </div>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

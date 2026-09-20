@@ -4,21 +4,32 @@ import useSWR from "swr";
 import Link from "next/link";
 import { fetcher } from "@/lib/fetcher";
 import { formatCurrency } from "@/lib/format";
-import { LEAD_STATUSES, LEAD_STATUS_LABELS, type LeadStatusValue } from "@/lib/constants";
+import {
+  LEAD_STATUSES,
+  LEAD_STATUS_LABELS,
+  LEAD_TEMPERATURES,
+  LEAD_TEMPERATURE_LABELS,
+  type LeadStatusValue,
+  type LeadTemperatureValue,
+} from "@/lib/constants";
 
 type DashboardStats = {
   totalLeads: number;
   totalRevenue: number;
   pipelineValue: number;
+  warmPipelineValue: number;
   conversionRate: number;
   closeRate: number;
   avgDealSize: number;
   avgTimeToCloseDays: number;
   byStatus: Record<LeadStatusValue, { count: number; value: number }>;
+  byTemperature: Record<LeadTemperatureValue, number>;
   avgAgeInStageDays: Record<LeadStatusValue, number>;
   reps: { id: string; name: string; totalLeads: number; wonLeads: number; revenue: number; pipelineValue: number }[];
   overdueFollowUps: number;
   upcomingFollowUps: number;
+  dueTodayFollowUps: number;
+  newLeadsToday: number;
 };
 
 export default function DashboardClient() {
@@ -32,26 +43,53 @@ export default function DashboardClient() {
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label="Revenue Won" value={formatCurrency(data.totalRevenue)} accent="emerald" />
         <StatCard label="Pipeline Value" value={formatCurrency(data.pipelineValue)} accent="blue" />
+        <StatCard label="Warm Pipeline" value={formatCurrency(data.warmPipelineValue)} accent="orange" />
         <StatCard label="Conversion Rate" value={`${data.conversionRate.toFixed(1)}%`} accent="indigo" />
         <StatCard label="Avg Deal Size" value={formatCurrency(data.avgDealSize)} accent="amber" />
         <StatCard label="Avg Time to Close" value={`${data.avgTimeToCloseDays.toFixed(1)}d`} accent="purple" />
       </div>
 
-      {(data.overdueFollowUps > 0 || data.upcomingFollowUps > 0) && (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {(data.overdueFollowUps > 0 || data.upcomingFollowUps > 0) && (
+          <Link
+            href="/followups"
+            className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 hover:ring-brand-300"
+          >
+            <span className="text-sm font-medium text-slate-700">⏰ Follow-ups</span>
+            <span className="text-sm text-slate-500">
+              {data.overdueFollowUps > 0 && <span className="mr-3 font-semibold text-rose-600">{data.overdueFollowUps} overdue</span>}
+              <span className="mr-3">{data.dueTodayFollowUps} due today</span>
+              {data.upcomingFollowUps} upcoming
+            </span>
+          </Link>
+        )}
+
         <Link
-          href="/followups"
+          href="/activity"
           className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 hover:ring-brand-300"
         >
-          <span className="text-sm font-medium text-slate-700">⏰ Follow-ups</span>
+          <span className="text-sm font-medium text-slate-700">📈 Team activity</span>
           <span className="text-sm text-slate-500">
-            {data.overdueFollowUps > 0 && <span className="mr-3 font-semibold text-rose-600">{data.overdueFollowUps} overdue</span>}
-            {data.upcomingFollowUps} upcoming
+            {data.newLeadsToday} new lead{data.newLeadsToday !== 1 ? "s" : ""} today
           </span>
         </Link>
-      )}
+      </div>
+
+      {/* Temperature breakdown */}
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <h2 className="mb-4 font-semibold text-slate-900">Leads by Temperature</h2>
+        <div className="grid grid-cols-3 gap-3">
+          {LEAD_TEMPERATURES.map((t) => (
+            <div key={t} className="rounded-lg bg-slate-50 p-3 text-center">
+              <p className="text-lg font-semibold text-slate-800">{data.byTemperature[t]}</p>
+              <p className="text-xs text-slate-500">{LEAD_TEMPERATURE_LABELS[t]}</p>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Pipeline funnel */}
       <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -130,6 +168,7 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
   const accentMap: Record<string, string> = {
     emerald: "text-emerald-600",
     blue: "text-blue-600",
+    orange: "text-orange-600",
     indigo: "text-indigo-600",
     amber: "text-amber-600",
     purple: "text-purple-600",

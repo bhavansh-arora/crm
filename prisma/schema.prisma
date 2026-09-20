@@ -20,10 +20,19 @@ model User {
   role         String     @default("SALES_REP") // "ADMIN" | "SALES_REP"
   active       Boolean    @default(true)
   createdAt    DateTime   @default(now())
+  lastActiveAt DateTime?
 
-  leads        Lead[]     @relation("AssignedLeads")
+  leads        Lead[]       @relation("AssignedLeads")
   activities   Activity[]
   followUps    FollowUp[]
+  paymentLinks PaymentLink[]
+}
+
+model LeadSource {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
 }
 
 model Lead {
@@ -35,6 +44,7 @@ model Lead {
   source          String?
   value           Float     @default(0)
   status          String    @default("NEW") // see LEAD_STATUSES
+  temperature     String? // "HOT" | "WARM" | "COLD"
   statusChangedAt DateTime  @default(now())
   closedAt        DateTime?
 
@@ -44,11 +54,13 @@ model Lead {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  activities Activity[]
-  followUps  FollowUp[]
+  activities   Activity[]
+  followUps    FollowUp[]
+  paymentLinks PaymentLink[]
 
   @@index([status])
   @@index([assignedToId])
+  @@index([temperature])
 }
 
 model Activity {
@@ -87,4 +99,22 @@ model FollowUp {
 
   @@index([leadId])
   @@index([dueAt])
+}
+
+model PaymentLink {
+  id          String    @id @default(cuid())
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId      String
+  createdBy   User?     @relation(fields: [createdById], references: [id])
+  createdById String?
+  razorpayId  String    @unique
+  shortUrl    String
+  amount      Float
+  description String?
+  status      String    @default("CREATED") // "CREATED" | "PAID" | "EXPIRED" | "CANCELLED"
+  createdAt   DateTime  @default(now())
+  paidAt      DateTime?
+
+  @@index([leadId])
+  @@index([razorpayId])
 }

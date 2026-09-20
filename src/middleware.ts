@@ -6,7 +6,7 @@ export default withAuth(
     const { pathname } = req.nextUrl;
     const role = req.nextauth.token?.role;
 
-    const adminOnlyPrefixes = ["/team", "/api/users"];
+    const adminOnlyPrefixes = ["/team", "/api/users", "/sources", "/api/sources", "/activity", "/api/admin"];
     if (adminOnlyPrefixes.some((p) => pathname.startsWith(p)) && role !== "ADMIN") {
       return NextResponse.redirect(new URL("/leads", req.url));
     }
@@ -29,9 +29,15 @@ export const config = {
     "/leads/:path*",
     "/team/:path*",
     "/followups/:path*",
+    "/sources/:path*",
+    "/activity/:path*",
     "/api/leads/:path*",
     "/api/users/:path*",
     "/api/followups/:path*",
     "/api/dashboard/:path*",
+    "/api/sources/:path*",
+    "/api/admin/:path*",
+    "/api/payment-links/:path*",
+    "/api/heartbeat",
   ],
 };

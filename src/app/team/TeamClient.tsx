@@ -3,8 +3,15 @@
 import { useState, type FormEvent } from "react";
 import useSWR from "swr";
 import { fetcher, apiRequest } from "@/lib/fetcher";
-import { formatDate } from "@/lib/format";
+import { formatDate, relativeTime } from "@/lib/format";
 import type { TeamMember } from "@/types/models";
+
+const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+
+function isOnline(lastActiveAt?: string | null): boolean {
+  if (!lastActiveAt) return false;
+  return Date.now() - new Date(lastActiveAt).getTime() < ONLINE_THRESHOLD_MS;
+}
 
 export default function TeamClient() {
   const { data, mutate, isLoading } = useSWR<{ users: TeamMember[] }>("/api/users", fetcher);
@@ -63,8 +70,23 @@ export default function TeamClient() {
                 {!u.active && <span className="ml-1 rounded bg-rose-50 px-1.5 py-0.5 text-xs text-rose-500">Inactive</span>}
               </p>
               <p className="truncate text-sm text-slate-500">{u.email}</p>
-              <p className="text-xs text-slate-400">
+              <p className="flex items-center gap-1.5 text-xs text-slate-400">
                 {u._count?.leads ?? 0} leads assigned · joined {formatDate(u.createdAt)}
+                {u.role === "SALES_REP" && (
+                  <>
+                    ·{" "}
+                    <span className={`inline-flex items-center gap-1 ${isOnline(u.lastActiveAt) ? "text-emerald-600" : ""}`}>
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${isOnline(u.lastActiveAt) ? "bg-emerald-500" : "bg-slate-300"}`}
+                      />
+                      {isOnline(u.lastActiveAt)
+                        ? "Online now"
+                        : u.lastActiveAt
+                          ? `Last seen ${relativeTime(u.lastActiveAt)}`
+                          : "Never logged in"}
+                    </span>
+                  </>
+                )}
               </p>
             </div>
             {u.role === "SALES_REP" && (

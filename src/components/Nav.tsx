@@ -14,6 +14,13 @@ const ADMIN_ITEMS: NavItem[] = [
   { href: "/team", label: "Team", icon: "👥" },
 ];
 
+// Shown in the top nav / mobile menu but not the bottom tab bar, to keep
+// that bar to the 4 most-used destinations.
+const ADMIN_SECONDARY_ITEMS: NavItem[] = [
+  { href: "/sources", label: "Sources", icon: "🏷️" },
+  { href: "/activity", label: "Activity", icon: "📈" },
+];
+
 const REP_ITEMS: NavItem[] = [
   { href: "/leads", label: "My Leads", icon: "🗂️" },
   { href: "/followups", label: "Follow-ups", icon: "⏰" },
@@ -24,6 +31,7 @@ export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SAL
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const items = role === "ADMIN" ? ADMIN_ITEMS : REP_ITEMS;
+  const secondaryItems = role === "ADMIN" ? ADMIN_SECONDARY_ITEMS : [];
 
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + "/");
@@ -41,7 +49,7 @@ export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SAL
           </div>
 
           <nav className="hidden items-center gap-1 md:flex">
-            {items.map((item) => (
+            {[...items, ...secondaryItems].map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -78,7 +86,7 @@ export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SAL
         {open && (
           <div className="border-t border-slate-200 px-4 pb-3 md:hidden">
             <div className="flex flex-col gap-1 pt-2">
-              {items.map((item) => (
+              {[...items, ...secondaryItems].map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}

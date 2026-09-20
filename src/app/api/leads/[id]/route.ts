@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAdmin, ApiError, handleApiError } from "@/lib/api-auth";
-import { LEAD_STATUSES } from "@/lib/constants";
+import { LEAD_STATUSES, LEAD_TEMPERATURES } from "@/lib/constants";
 
 const updateLeadSchema = z.object({
   name: z.string().min(1).optional(),
@@ -13,7 +13,13 @@ const updateLeadSchema = z.object({
   value: z.coerce.number().min(0).optional(),
   assignedToId: z.string().optional().nullable(),
   status: z.enum(LEAD_STATUSES).optional(),
+  temperature: z.enum(LEAD_TEMPERATURES).nullable().optional(),
 });
+
+// Fields a sales rep may update on their own lead: pipeline status, hot/warm/cold
+// classification, and the amount they've pitched. Everything else (contact
+// details, reassignment) is admin-only.
+const REP_EDITABLE_FIELDS = ["status", "temperature", "value"];
 
 async function getLeadOr404(id: string) {
   const lead = await prisma.lead.findUnique({ where: { id } });
@@ -36,6 +42,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         followUps: {
           include: { user: { select: { id: true, name: true } } },
           orderBy: { dueAt: "asc" },
+        },
+        paymentLinks: {
+          include: { createdBy: { select: { id: true, name: true } } },
+          orderBy: { createdAt: "desc" },
         },
       },
     });
@@ -64,12 +74,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const body = await req.json();
     const data = updateLeadSchema.parse(body);
 
-    // Sales reps may only change the status of their own lead; everything
-    // else (reassignment, master data edits) is admin-only.
     if (session.user.role === "SALES_REP") {
-      const allowedKeys = Object.keys(data).filter((k) => k !== "status");
-      if (allowedKeys.length > 0) {
-        throw new ApiError(403, "Only status can be updated");
+      const disallowedKeys = Object.keys(data).filter((k) => !REP_EDITABLE_FIELDS.includes(k));
+      if (disallowedKeys.length > 0) {
+        throw new ApiError(403, `Only ${REP_EDITABLE_FIELDS.join(", ")} can be updated`);
       }
     }
 

@@ -24,12 +24,35 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   upcoming follow-ups on a dedicated page, and mark them done. An optional
   cron endpoint (`/api/cron/reminders`) emails reps about follow-ups that are
   due, if SMTP is configured.
-- **Admin dashboard**: revenue won, pipeline value, conversion rate, average
-  deal size, average time to close, pipeline-by-stage funnel with average
-  time spent in each stage, and revenue/conversion per sales rep.
+- **Admin dashboard**: revenue won, pipeline value, warm pipeline (pitched
+  amount on Warm leads), conversion rate, average deal size, average time to
+  close, pipeline-by-stage funnel with average time spent in each stage,
+  temperature breakdown, revenue/conversion per sales rep, and today's new
+  leads/due follow-ups.
+- **Lead temperature**: reps mark each lead Hot/Warm/Cold; filter and sort
+  leads by it, and see it as a badge everywhere.
+- **Amount pitched**: reps can update the deal value they've pitched
+  directly on the lead; Warm leads with a pitched amount roll up into the
+  Warm Pipeline stat.
+- **Leads list filtering**: quick chips for Due Today / Overdue / Status
+  Stale (no status change in 3+ days), plus sort by value or time in stage.
+- **Admin-managed lead sources**: a Sources page to add/retire the list
+  reps pick from when a lead is created — no more free-text typos.
+- **Team activity monitoring**: see who's online right now (a lightweight
+  heartbeat ping), when each rep was last active, and how many status
+  changes/notes/calls they've logged — with an automatic warning if leads
+  are being updated at a suspiciously fast pace (e.g. several status
+  changes within the same minute).
+- **Payment links (optional, needs Razorpay keys)**: generate a Razorpay
+  payment link from any lead, share it, and see whether it's been paid —
+  updated automatically via webhook, or on demand with "Check status".
+- **Browser notifications**: opt in once, then get a real desktop
+  notification the moment a follow-up becomes due, for as long as the app
+  is open — no email setup required.
 - **Role-based access**: admins see everything; sales reps only see and act
   on leads assigned to them, and can't reach admin pages.
 - Responsive layout with a mobile bottom tab bar and a desktop top nav.
+- Currency shown throughout as ₹ (INR).
 
 ## Getting started
 
@@ -157,6 +180,24 @@ variables and redeploy/restart:
   10 minutes via crontab.
 
 Either way, just fill in `SMTP_*` — nothing else to wire up.
+
+## Payment links (optional, Razorpay)
+
+Lets reps generate a payment link straight from a lead and see whether it's
+been paid. Disabled by default (leads simply show no "Request payment"
+result and an error saying it isn't set up).
+
+1. Get your **Key ID** and **Key Secret** from Razorpay Dashboard → Settings
+   → API Keys. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`.
+2. (Recommended) In Razorpay Dashboard → Settings → Webhooks, add a webhook
+   pointing at `https://yourdomain.com/api/webhooks/razorpay` with the
+   **payment_link.paid** event enabled, and set `RAZORPAY_WEBHOOK_SECRET` to
+   the same secret you enter there. This makes "Paid" show up automatically,
+   in real time.
+3. Without step 2, payment status only updates when someone clicks the
+   "Check status" button on the lead — still correct, just not automatic.
+
+Redeploy/restart after setting these.
 
 ## Notes
 

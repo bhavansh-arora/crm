@@ -1,9 +1,15 @@
-import type { LeadStatusValue, CallOutcomeValue } from "@/lib/constants";
+import type {
+  LeadStatusValue,
+  CallOutcomeValue,
+  LeadTemperatureValue,
+  PaymentLinkStatusValue,
+} from "@/lib/constants";
 
 export type UserSummary = {
   id: string;
   name: string;
   email?: string;
+  lastActiveAt?: string | null;
 };
 
 export type LeadListItem = {
@@ -15,11 +21,13 @@ export type LeadListItem = {
   source: string | null;
   value: number;
   status: LeadStatusValue;
+  temperature: LeadTemperatureValue | null;
   statusChangedAt: string;
   createdAt: string;
   updatedAt: string;
   assignedTo: UserSummary | null;
   _count: { activities: number; followUps: number };
+  followUps: { id: string; dueAt: string }[];
 };
 
 export type Activity = {
@@ -52,10 +60,24 @@ export type FollowUp = {
   };
 };
 
-export type LeadDetail = LeadListItem & {
+export type PaymentLink = {
+  id: string;
+  leadId: string;
+  razorpayId: string;
+  shortUrl: string;
+  amount: number;
+  description: string | null;
+  status: PaymentLinkStatusValue;
+  createdAt: string;
+  paidAt: string | null;
+  createdBy: UserSummary | null;
+};
+
+export type LeadDetail = Omit<LeadListItem, "followUps"> & {
   closedAt: string | null;
   activities: Activity[];
   followUps: FollowUp[];
+  paymentLinks: PaymentLink[];
 };
 
 export type TeamMember = {
@@ -65,5 +87,13 @@ export type TeamMember = {
   role: "ADMIN" | "SALES_REP";
   active: boolean;
   createdAt: string;
+  lastActiveAt?: string | null;
   _count?: { leads: number };
+};
+
+export type LeadSource = {
+  id: string;
+  name: string;
+  active: boolean;
+  createdAt: string;
 };

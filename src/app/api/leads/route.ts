@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAdmin, handleApiError } from "@/lib/api-auth";
-import { LEAD_STATUSES } from "@/lib/constants";
+import { LEAD_STATUSES, LEAD_TEMPERATURES, OPEN_STATUSES } from "@/lib/constants";
 
 const createLeadSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -13,15 +13,23 @@ const createLeadSchema = z.object({
   value: z.coerce.number().min(0).default(0),
   assignedToId: z.string().optional().nullable(),
   status: z.enum(LEAD_STATUSES).optional(),
+  temperature: z.enum(LEAD_TEMPERATURES).optional().nullable(),
 });
+
+// A lead counts as "stale" once its status hasn't moved in this many days
+// (and it's still open — WON/LOST leads are done, not stale).
+const STALE_DAYS = 3;
 
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status");
+    const temperature = searchParams.get("temperature");
     const assignedToId = searchParams.get("assignedToId");
     const search = searchParams.get("search");
+    const filter = searchParams.get("filter"); // "due_today" | "overdue" | "stale"
+    const sort = searchParams.get("sort") || "updated_desc";
 
     const where: Record<string, unknown> = {};
 
@@ -32,6 +40,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (status) where.status = status;
+    if (temperature) where.temperature = temperature;
     if (search) {
       where.OR = [
         { name: { contains: search } },
@@ -41,13 +50,41 @@ export async function GET(req: NextRequest) {
       ];
     }
 
+    const now = new Date();
+    if (filter === "due_today") {
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(now);
+      endOfDay.setHours(23, 59, 59, 999);
+      where.followUps = { some: { completed: false, dueAt: { gte: startOfDay, lte: endOfDay } } };
+    } else if (filter === "overdue") {
+      where.followUps = { some: { completed: false, dueAt: { lt: now } } };
+    } else if (filter === "stale") {
+      const staleBefore = new Date(now.getTime() - STALE_DAYS * 24 * 60 * 60 * 1000);
+      where.status = { in: OPEN_STATUSES };
+      where.statusChangedAt = { lt: staleBefore };
+    }
+
+    const orderBy: Record<string, "asc" | "desc"> =
+      sort === "value_desc"
+        ? { value: "desc" }
+        : sort === "stale_first"
+          ? { statusChangedAt: "asc" }
+          : { updatedAt: "desc" };
+
     const leads = await prisma.lead.findMany({
       where,
       include: {
         assignedTo: { select: { id: true, name: true } },
         _count: { select: { activities: true, followUps: { where: { completed: false } } } },
+        followUps: {
+          where: { completed: false },
+          orderBy: { dueAt: "asc" },
+          take: 1,
+          select: { id: true, dueAt: true },
+        },
       },
-      orderBy: { updatedAt: "desc" },
+      orderBy,
     });
 
     return NextResponse.json({ leads });
@@ -72,6 +109,7 @@ export async function POST(req: NextRequest) {
         value: data.value,
         assignedToId: data.assignedToId || null,
         status: data.status || "NEW",
+        temperature: data.temperature || null,
       },
       include: { assignedTo: { select: { id: true, name: true } } },
     });

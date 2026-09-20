@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, handleApiError } from "@/lib/api-auth";
-import { LEAD_STATUSES, type LeadStatusValue } from "@/lib/constants";
+import { LEAD_STATUSES, LEAD_TEMPERATURES, type LeadStatusValue, type LeadTemperatureValue } from "@/lib/constants";
 
 export async function GET() {
   try {
@@ -12,6 +12,7 @@ export async function GET() {
         id: true,
         value: true,
         status: true,
+        temperature: true,
         assignedToId: true,
         assignedTo: { select: { id: true, name: true } },
         createdAt: true,
@@ -39,8 +40,13 @@ export async function GET() {
       { id: string; name: string; totalLeads: number; wonLeads: number; revenue: number; pipelineValue: number }
     >();
 
+    const byTemperature: Record<LeadTemperatureValue, number> = Object.fromEntries(
+      LEAD_TEMPERATURES.map((t) => [t, 0])
+    ) as Record<LeadTemperatureValue, number>;
+
     let totalRevenue = 0;
     let pipelineValue = 0;
+    let warmPipelineValue = 0;
     const closeDurations: number[] = [];
 
     for (const lead of leads) {
@@ -50,6 +56,12 @@ export async function GET() {
 
       const ageDays = (now - new Date(lead.statusChangedAt).getTime()) / dayMs;
       stageAgeAccumulator[status].push(ageDays);
+
+      const isOpen = lead.status !== "WON" && lead.status !== "LOST";
+      if (lead.temperature && (LEAD_TEMPERATURES as readonly string[]).includes(lead.temperature)) {
+        byTemperature[lead.temperature as LeadTemperatureValue] += 1;
+        if (lead.temperature === "WARM" && isOpen) warmPipelineValue += lead.value;
+      }
 
       if (lead.status === "WON") {
         totalRevenue += lead.value;
@@ -96,26 +108,41 @@ export async function GET() {
     const avgTimeToCloseDays =
       closeDurations.length > 0 ? closeDurations.reduce((a, b) => a + b, 0) / closeDurations.length : 0;
 
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
     const upcomingFollowUps = await prisma.followUp.count({
       where: { completed: false, dueAt: { gte: new Date() } },
     });
     const overdueFollowUps = await prisma.followUp.count({
       where: { completed: false, dueAt: { lt: new Date() } },
     });
+    const dueTodayFollowUps = await prisma.followUp.count({
+      where: { completed: false, dueAt: { gte: startOfDay, lte: endOfDay } },
+    });
+    const newLeadsToday = await prisma.lead.count({
+      where: { createdAt: { gte: startOfDay, lte: endOfDay } },
+    });
 
     return NextResponse.json({
       totalLeads,
       totalRevenue,
       pipelineValue,
+      warmPipelineValue,
       conversionRate,
       closeRate,
       avgDealSize,
       avgTimeToCloseDays,
       byStatus,
+      byTemperature,
       avgAgeInStageDays,
       reps: Array.from(repMap.values()).sort((a, b) => b.revenue - a.revenue),
       overdueFollowUps,
       upcomingFollowUps,
+      dueTodayFollowUps,
+      newLeadsToday,
     });
   } catch (error) {
     return handleApiError(error);

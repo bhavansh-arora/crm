@@ -2,15 +2,18 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import useSWR from "swr";
 import { fetcher, apiRequest } from "@/lib/fetcher";
-import { LEAD_STATUSES, LEAD_STATUS_LABELS } from "@/lib/constants";
-import type { TeamMember, LeadListItem } from "@/types/models";
+import { LEAD_STATUSES, LEAD_STATUS_LABELS, LEAD_TEMPERATURES, LEAD_TEMPERATURE_LABELS } from "@/lib/constants";
+import type { TeamMember, LeadListItem, LeadSource } from "@/types/models";
 
 export default function NewLeadForm() {
   const router = useRouter();
   const { data: teamData } = useSWR<{ users: TeamMember[] }>("/api/users", fetcher);
   const reps = (teamData?.users || []).filter((u) => u.role === "SALES_REP" && u.active);
+  const { data: sourcesData } = useSWR<{ sources: LeadSource[] }>("/api/sources", fetcher);
+  const activeSources = (sourcesData?.sources || []).filter((s) => s.active);
 
   const [form, setForm] = useState({
     name: "",
@@ -20,6 +23,7 @@ export default function NewLeadForm() {
     source: "",
     value: "",
     status: "NEW",
+    temperature: "",
     assignedToId: "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +46,7 @@ export default function NewLeadForm() {
         ...form,
         value: form.value ? Number(form.value) : 0,
         assignedToId: form.assignedToId || null,
+        temperature: form.temperature || null,
       });
       router.push(`/leads/${lead.id}`);
     } catch (err) {
@@ -98,16 +103,27 @@ export default function NewLeadForm() {
             />
           </Field>
           <Field label="Source">
-            <input
-              value={form.source}
-              onChange={(e) => update("source", e.target.value)}
-              className="input"
-              placeholder="Website, referral, ad…"
-            />
+            <select value={form.source} onChange={(e) => update("source", e.target.value)} className="input">
+              <option value="">—</option>
+              {activeSources.map((s) => (
+                <option key={s.id} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            {activeSources.length === 0 && (
+              <p className="mt-1 text-xs text-slate-400">
+                No sources yet —{" "}
+                <Link href="/sources" className="underline hover:text-brand-700">
+                  add some
+                </Link>
+                .
+              </p>
+            )}
           </Field>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Deal value (₹)">
             <input
               type="number"
@@ -123,6 +139,21 @@ export default function NewLeadForm() {
               {LEAD_STATUSES.map((s) => (
                 <option key={s} value={s}>
                   {LEAD_STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Temperature">
+            <select
+              aria-label="Temperature"
+              value={form.temperature}
+              onChange={(e) => update("temperature", e.target.value)}
+              className="input"
+            >
+              <option value="">Not set</option>
+              {LEAD_TEMPERATURES.map((t) => (
+                <option key={t} value={t}>
+                  {LEAD_TEMPERATURE_LABELS[t]}
                 </option>
               ))}
             </select>
