@@ -1,0 +1,11 @@
+# Default: plain HTTP on port 80, no domain required.
+#
+# Once you point a domain's A record at this server, replace ":80" below
+# with your domain (e.g. "crm.example.com") and run:
+#   docker compose restart caddy
+# Caddy will then automatically obtain and renew a Let's Encrypt TLS
+# certificate — no other changes needed. deploy/setup-vps.sh does this for
+# you automatically if you give it a domain.
+:80 {
+	reverse_proxy app:3000
+}
