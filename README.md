@@ -5,8 +5,7 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
 ## Stack
 
 - Next.js 15 (App Router) + TypeScript
-- Prisma + SQLite (swap the datasource for Postgres/MySQL in production by
-  changing `prisma/schema.prisma`'s `provider` and `DATABASE_URL`)
+- Prisma + Postgres
 - NextAuth (credentials login, JWT sessions, role-based access)
 - Tailwind CSS
 
@@ -36,10 +35,12 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
 
 ```bash
 npm install
-cp .env.example .env      # fill in NEXTAUTH_SECRET (any random string) and,
-                           # optionally, the seed admin credentials
-npm run db:migrate        # creates the SQLite database and applies the schema
-                           # (this also seeds an initial admin user)
+cp .env.example .env      # fill in DATABASE_URL (a Postgres connection
+                           # string — see the comment in .env.example for a
+                           # one-line local Docker Postgres, or just use a
+                           # free Neon database), NEXTAUTH_SECRET (any
+                           # random string), and the seed admin credentials
+npm run db:migrate        # applies the schema (also seeds an initial admin user)
 npm run dev
 ```
 
@@ -51,10 +52,57 @@ Team page).
 From the Team page (as an admin) you can add sales reps, who log in with the
 email/password you set for them.
 
-## Deploying to a VPS (recommended, ~$4-6/month)
+## Deploying to Vercel + Neon (free, fastest, no ID verification)
 
-This gets the app live on a small always-on server, with SQLite left exactly
-as-is (the server's disk is persistent, unlike serverless platforms).
+Best option when you need this live quickly — sign-up is just email/GitHub,
+no KYC/ID verification on either service. Cost: $0/month at this scale.
+Trade-off: the free Neon database auto-suspends after ~5 minutes idle, so
+the very first request after a quiet spell takes an extra 0.5-2s to wake
+back up — not noticeable in daily use.
+
+**1. Create a free Neon Postgres database** at neon.tech (sign in with
+GitHub or email, no card required). Create a project, then copy its
+connection string from the dashboard (starts with `postgresql://`).
+
+**2. Create a free Vercel account** at vercel.com (sign in with GitHub —
+this also lets it see your repos). Click **Add New → Project**, and import
+`bhavansh-arora/crm`, selecting the `claude/crm-admin-lead-management-2dea2w`
+branch.
+
+**3. Before clicking Deploy**, add these Environment Variables in the
+import screen (Settings → Environment Variables works too, if you've
+already deployed once):
+
+| Name | Value |
+|---|---|
+| `DATABASE_URL` | the Neon connection string from step 1 |
+| `NEXTAUTH_SECRET` | any random string — generate one with `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | your Vercel URL, e.g. `https://crm-yourname.vercel.app` (Vercel shows this after first deploy — add it, then redeploy once) |
+| `SEED_ADMIN_EMAIL` | the email your team's admin will log in with |
+| `SEED_ADMIN_PASSWORD` | a temporary password (change it after first login) |
+| `CRON_SECRET` | any random string — Vercel automatically sends it to `/api/cron/reminders` on the schedule in `vercel.json` |
+
+**4. Click Deploy.** Vercel detects the `vercel-build` script in
+`package.json`, which runs migrations and creates the admin account
+automatically as part of the build — no separate step needed. When it
+finishes, open the URL it gives you and log in.
+
+**Giving employees access tomorrow:** once you're logged in as admin, go to
+the Team page and add a sales-rep account for each employee (their own
+email + a temporary password); each one logs in at the same URL.
+
+**Redeploying after code changes:** push to the branch, or click Redeploy
+in the Vercel dashboard — migrations and the admin check re-run safely
+every time (they no-op if there's nothing new to do).
+
+**Moving to the VPS later:** once your VPS's KYC clears, you can point it
+at this exact same Neon database (paste the same connection string into
+`deploy/setup-vps.sh` when it asks) — no data migration, no re-entering
+leads.
+
+## Deploying to a VPS (once KYC clears, ~$4-6/month, no cold starts)
+
+This gets the app onto a small always-on server you control.
 
 **1. Create the cheapest VPS you can find** running **Ubuntu 22.04 or 24.04**,
 at least 1GB RAM (2GB is safer for the build step) — e.g. a Hetzner CX22, a
@@ -98,17 +146,23 @@ Your `.env` and database are untouched.
 ## Follow-up reminder emails (optional)
 
 The in-app "Follow-ups" page is always accurate and needs no configuration.
-To also send emails when a follow-up becomes due, set the `SMTP_*` variables
-in `.env` and call `GET /api/cron/reminders` on a schedule (every 5–15
-minutes), sending `Authorization: Bearer <CRON_SECRET>`. On the VPS setup
-above, `deploy/setup-vps.sh` already schedules this call for you via
-crontab — you only need to fill in `SMTP_*` in `.env` and restart
-(`docker compose restart app`) to turn on the emails.
+To also send emails when a follow-up becomes due, set the `SMTP_*`
+variables and redeploy/restart:
+
+- **On Vercel**, `vercel.json` already schedules a daily call to
+  `/api/cron/reminders` via Vercel Cron (Vercel's free Hobby plan limits
+  cron jobs to once per day — fine as a daily digest of what's due; upgrade
+  to Pro for hourly/minute-level scheduling).
+- **On the VPS**, `deploy/setup-vps.sh` already schedules this call every
+  10 minutes via crontab.
+
+Either way, just fill in `SMTP_*` — nothing else to wire up.
 
 ## Notes
 
-- SQLite has no native enum support in Prisma, so roles/statuses/etc. are
-  stored as plain strings; the allowed values live in
+- Roles/statuses/etc. are stored as plain strings rather than Postgres
+  native enums (kept simple rather than reworked after an earlier SQLite
+  version of this schema); the allowed values live in
   `src/lib/constants.ts` and are enforced by the API layer with `zod`.
 - `npm audit` currently reports one high-severity advisory in a `postcss`
   version bundled internally by Next.js itself (not a direct dependency of

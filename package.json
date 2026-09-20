@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "vercel-build": "prisma generate && prisma migrate deploy && next build && node prisma/seed.docker.cjs",
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "prisma migrate dev",

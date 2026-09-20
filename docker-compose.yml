@@ -3,8 +3,6 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
-    volumes:
-      - crm-db:/app/data
     expose:
       - "3000"
 
@@ -22,6 +20,5 @@ services:
       - app
 
 volumes:
-  crm-db:
   caddy-data:
   caddy-config:

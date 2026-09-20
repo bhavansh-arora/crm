@@ -5,10 +5,11 @@
 #   bash setup-vps.sh
 #
 # It installs Docker, opens the firewall, clones the app, generates the
-# production .env (asking only for an admin email/password and, optionally,
-# a domain), builds the image, starts everything, and schedules the
-# follow-up reminder check. Safe to re-run — it pulls the latest code and
-# redeploys without touching your existing .env or database.
+# production .env (asking for a Postgres connection string, an admin
+# email/password, and optionally a domain), builds the image, starts
+# everything, and schedules the follow-up reminder check. Safe to re-run —
+# it pulls the latest code and redeploys without touching your existing
+# .env or database.
 set -euo pipefail
 
 REPO_URL="https://github.com/bhavansh-arora/crm.git"
@@ -49,6 +50,15 @@ SERVER_IP="$(curl -fsSL ifconfig.me || echo 'YOUR_SERVER_IP')"
 if [ ! -f .env ]; then
   echo ""
   echo "==> First-time setup. A few questions (press Enter to accept defaults):"
+  echo ""
+  echo "This app needs a Postgres database. If you don't have one yet, create"
+  echo "a free one at https://neon.tech (takes ~1 minute) and copy its"
+  echo "connection string — it looks like postgresql://user:pass@host/db."
+  read -rp "Postgres connection string (DATABASE_URL): " DB_URL
+  while [ -z "$DB_URL" ]; do
+    read -rp "This is required — paste your Postgres connection string: " DB_URL
+  done
+
   read -rp "Admin email [admin@example.com]: " ADMIN_EMAIL
   ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
 
@@ -68,6 +78,9 @@ if [ ! -f .env ]; then
     SITE_URL="http://$SERVER_IP"
   fi
 
+  # DB_URL may contain '#' or other sed-unfriendly characters; use '|' as the
+  # sed delimiter instead of the '#' used for the other substitutions.
+  sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"$DB_URL\"|" .env
   sed -i "s#^NEXTAUTH_SECRET=.*#NEXTAUTH_SECRET=\"$NEXTAUTH_SECRET\"#" .env
   sed -i "s#^NEXTAUTH_URL=.*#NEXTAUTH_URL=\"$SITE_URL\"#" .env
   sed -i "s#^SEED_ADMIN_EMAIL=.*#SEED_ADMIN_EMAIL=\"$ADMIN_EMAIL\"#" .env
