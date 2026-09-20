@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no native enum support in Prisma, so roles/statuses are plain
+// strings here. The allowed values are the single source of truth in
+// src/lib/constants.ts and are enforced at the API layer with zod.
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         String     @default("SALES_REP") // "ADMIN" | "SALES_REP"
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  leads        Lead[]     @relation("AssignedLeads")
+  activities   Activity[]
+  followUps    FollowUp[]
+}
+
+model Lead {
+  id              String    @id @default(cuid())
+  name            String
+  email           String?
+  phone           String?
+  company         String?
+  source          String?
+  value           Float     @default(0)
+  status          String    @default("NEW") // see LEAD_STATUSES
+  statusChangedAt DateTime  @default(now())
+  closedAt        DateTime?
+
+  assignedTo   User?   @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  assignedToId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  activities Activity[]
+  followUps  FollowUp[]
+
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model Activity {
+  id     String @id @default(cuid())
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId String
+  user   User?  @relation(fields: [userId], references: [id])
+  userId String?
+  type   String // "NOTE" | "CALL" | "STATUS_CHANGE"
+
+  // populated when type = CALL
+  callNumber  Int?
+  callOutcome String? // see CALL_OUTCOMES
+
+  // populated when type = STATUS_CHANGE
+  fromStatus String?
+  toStatus   String?
+
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+}
+
+model FollowUp {
+  id             String    @id @default(cuid())
+  lead           Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId         String
+  user           User?     @relation(fields: [userId], references: [id])
+  userId         String?
+  dueAt          DateTime
+  note           String?
+  completed      Boolean   @default(false)
+  reminderSentAt DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([leadId])
+  @@index([dueAt])
+}

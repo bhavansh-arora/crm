@@ -1,0 +1,143 @@
+"use client";
+
+import useSWR from "swr";
+import Link from "next/link";
+import { fetcher } from "@/lib/fetcher";
+import { formatCurrency } from "@/lib/format";
+import { LEAD_STATUSES, LEAD_STATUS_LABELS, type LeadStatusValue } from "@/lib/constants";
+
+type DashboardStats = {
+  totalLeads: number;
+  totalRevenue: number;
+  pipelineValue: number;
+  conversionRate: number;
+  closeRate: number;
+  avgDealSize: number;
+  avgTimeToCloseDays: number;
+  byStatus: Record<LeadStatusValue, { count: number; value: number }>;
+  avgAgeInStageDays: Record<LeadStatusValue, number>;
+  reps: { id: string; name: string; totalLeads: number; wonLeads: number; revenue: number; pipelineValue: number }[];
+  overdueFollowUps: number;
+  upcomingFollowUps: number;
+};
+
+export default function DashboardClient() {
+  const { data, isLoading } = useSWR<DashboardStats>("/api/dashboard", fetcher);
+
+  if (isLoading || !data) return <p className="text-sm text-slate-500">Loading dashboard…</p>;
+
+  const maxStatusCount = Math.max(1, ...LEAD_STATUSES.map((s) => data.byStatus[s].count));
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard label="Revenue Won" value={formatCurrency(data.totalRevenue)} accent="emerald" />
+        <StatCard label="Pipeline Value" value={formatCurrency(data.pipelineValue)} accent="blue" />
+        <StatCard label="Conversion Rate" value={`${data.conversionRate.toFixed(1)}%`} accent="indigo" />
+        <StatCard label="Avg Deal Size" value={formatCurrency(data.avgDealSize)} accent="amber" />
+        <StatCard label="Avg Time to Close" value={`${data.avgTimeToCloseDays.toFixed(1)}d`} accent="purple" />
+      </div>
+
+      {(data.overdueFollowUps > 0 || data.upcomingFollowUps > 0) && (
+        <Link
+          href="/followups"
+          className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 hover:ring-brand-300"
+        >
+          <span className="text-sm font-medium text-slate-700">⏰ Follow-ups</span>
+          <span className="text-sm text-slate-500">
+            {data.overdueFollowUps > 0 && <span className="mr-3 font-semibold text-rose-600">{data.overdueFollowUps} overdue</span>}
+            {data.upcomingFollowUps} upcoming
+          </span>
+        </Link>
+      )}
+
+      {/* Pipeline funnel */}
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <h2 className="mb-4 font-semibold text-slate-900">Pipeline by Stage</h2>
+        <div className="space-y-3">
+          {LEAD_STATUSES.map((status) => {
+            const stat = data.byStatus[status];
+            const widthPct = (stat.count / maxStatusCount) * 100;
+            return (
+              <div key={status}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="font-medium text-slate-700">{LEAD_STATUS_LABELS[status]}</span>
+                  <span className="text-slate-500">
+                    {stat.count} lead{stat.count !== 1 ? "s" : ""} · {formatCurrency(stat.value)} · avg{" "}
+                    {data.avgAgeInStageDays[status].toFixed(1)}d in stage
+                  </span>
+                </div>
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className={`h-full rounded-full ${barColor(status)}`}
+                    style={{ width: `${Math.max(widthPct, stat.count > 0 ? 3 : 0)}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Revenue by rep */}
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <h2 className="mb-4 font-semibold text-slate-900">Revenue by Sales Rep</h2>
+        {data.reps.length === 0 && <p className="text-sm text-slate-400">No leads assigned yet.</p>}
+        <div className="space-y-3">
+          {data.reps.map((rep) => {
+            const maxRevenue = Math.max(1, ...data.reps.map((r) => r.revenue));
+            const conversionForRep = rep.totalLeads > 0 ? (rep.wonLeads / rep.totalLeads) * 100 : 0;
+            return (
+              <div key={rep.id}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="font-medium text-slate-700">{rep.name}</span>
+                  <span className="text-slate-500">
+                    {formatCurrency(rep.revenue)} won · {rep.wonLeads}/{rep.totalLeads} leads (
+                    {conversionForRep.toFixed(0)}%) · {formatCurrency(rep.pipelineValue)} in pipeline
+                  </span>
+                </div>
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full rounded-full bg-brand-500"
+                    style={{ width: `${Math.max((rep.revenue / maxRevenue) * 100, rep.revenue > 0 ? 3 : 0)}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function barColor(status: LeadStatusValue) {
+  const map: Record<LeadStatusValue, string> = {
+    NEW: "bg-slate-400",
+    CONTACTED: "bg-blue-500",
+    QUALIFIED: "bg-indigo-500",
+    PROPOSAL: "bg-amber-500",
+    NEGOTIATION: "bg-purple-500",
+    WON: "bg-emerald-500",
+    LOST: "bg-rose-400",
+  };
+  return map[status];
+}
+
+function StatCard({ label, value, accent }: { label: string; value: string; accent: string }) {
+  const accentMap: Record<string, string> = {
+    emerald: "text-emerald-600",
+    blue: "text-blue-600",
+    indigo: "text-indigo-600",
+    amber: "text-amber-600",
+    purple: "text-purple-600",
+  };
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className={`mt-1 text-lg font-semibold ${accentMap[accent] || "text-slate-900"}`}>{value}</p>
+    </div>
+  );
+}
