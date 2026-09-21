@@ -11,8 +11,10 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
 
 ## Features
 
-- **Admin panel**: create leads, create/deactivate sales reps, assign leads
-  to reps, reassign at any time.
+- **Admin panel**: create leads, create/deactivate/delete sales reps, assign
+  leads to reps, reassign at any time. Deleting a user is blocked while they
+  still have leads assigned (reassign those first), and you can't delete
+  your own account or the last remaining admin.
 - **Lead pipeline**: New → Contacted → Qualified → Proposal Sent →
   Negotiation → Won/Lost. Anyone assigned to a lead can move it through the
   pipeline; every change is recorded.

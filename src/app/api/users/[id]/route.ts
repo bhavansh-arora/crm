@@ -44,3 +44,40 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return handleApiError(error);
   }
 }
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const session = await requireAdmin();
+
+    const existing = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, _count: { select: { leads: true } } },
+    });
+    if (!existing) throw new ApiError(404, "User not found");
+
+    if (id === session.user.id) {
+      throw new ApiError(400, "You can't delete your own account");
+    }
+
+    if (existing.role === "ADMIN") {
+      const adminCount = await prisma.user.count({ where: { role: "ADMIN" } });
+      if (adminCount <= 1) {
+        throw new ApiError(400, "Can't delete the last remaining admin");
+      }
+    }
+
+    if (existing._count.leads > 0) {
+      throw new ApiError(
+        400,
+        `Reassign ${existing._count.leads} lead${existing._count.leads === 1 ? "" : "s"} away from this user before deleting them`
+      );
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return handleApiError(error);
+  }
+}

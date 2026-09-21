@@ -30,6 +30,17 @@ export default function TeamClient() {
     }
   }
 
+  async function deleteUser(user: TeamMember) {
+    if (!confirm(`Delete ${user.name}? This cannot be undone.`)) return;
+    setError(null);
+    try {
+      await apiRequest(`/api/users/${user.id}`, "DELETE");
+      mutate();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete user");
+    }
+  }
+
   return (
     <div className="mx-auto max-w-2xl">
       <div className="mb-5 flex items-center justify-between">
@@ -89,18 +100,26 @@ export default function TeamClient() {
                 )}
               </p>
             </div>
-            {u.role === "SALES_REP" && (
+            <div className="flex shrink-0 items-center gap-2">
+              {u.role === "SALES_REP" && (
+                <button
+                  onClick={() => toggleActive(u)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ${
+                    u.active
+                      ? "text-rose-600 ring-rose-200 hover:bg-rose-50"
+                      : "text-emerald-600 ring-emerald-200 hover:bg-emerald-50"
+                  }`}
+                >
+                  {u.active ? "Deactivate" : "Reactivate"}
+                </button>
+              )}
               <button
-                onClick={() => toggleActive(u)}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ${
-                  u.active
-                    ? "text-rose-600 ring-rose-200 hover:bg-rose-50"
-                    : "text-emerald-600 ring-emerald-200 hover:bg-emerald-50"
-                }`}
+                onClick={() => deleteUser(u)}
+                className="rounded-lg px-3 py-1.5 text-xs font-medium text-rose-600 ring-1 ring-rose-200 hover:bg-rose-50"
               >
-                {u.active ? "Deactivate" : "Reactivate"}
+                Delete
               </button>
-            )}
+            </div>
           </div>
         ))}
       </div>
