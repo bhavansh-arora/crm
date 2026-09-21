@@ -27,27 +27,29 @@ async function getLeadOr404(id: string) {
   return lead;
 }
 
+const LEAD_DETAIL_INCLUDE = {
+  assignedTo: { select: { id: true, name: true, email: true } },
+  activities: {
+    include: { user: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "desc" as const },
+  },
+  followUps: {
+    include: { user: { select: { id: true, name: true } } },
+    orderBy: { dueAt: "asc" as const },
+  },
+  paymentLinks: {
+    include: { createdBy: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "desc" as const },
+  },
+};
+
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const session = await requireSession();
     const lead = await prisma.lead.findUnique({
       where: { id },
-      include: {
-        assignedTo: { select: { id: true, name: true, email: true } },
-        activities: {
-          include: { user: { select: { id: true, name: true } } },
-          orderBy: { createdAt: "desc" },
-        },
-        followUps: {
-          include: { user: { select: { id: true, name: true } } },
-          orderBy: { dueAt: "asc" },
-        },
-        paymentLinks: {
-          include: { createdBy: { select: { id: true, name: true } } },
-          orderBy: { createdAt: "desc" },
-        },
-      },
+      include: LEAD_DETAIL_INCLUDE,
     });
 
     if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
@@ -90,11 +92,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const lead = await prisma.$transaction(async (tx) => {
-      const updated = await tx.lead.update({
-        where: { id },
-        data: updateData,
-        include: { assignedTo: { select: { id: true, name: true } } },
-      });
+      await tx.lead.update({ where: { id }, data: updateData });
 
       if (data.status && data.status !== existing.status) {
         await tx.activity.create({
@@ -108,7 +106,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         });
       }
 
-      return updated;
+      // Return the same full shape as GET so the client can update its cache
+      // in place instead of firing a second round trip to refetch it.
+      return tx.lead.findUniqueOrThrow({ where: { id }, include: LEAD_DETAIL_INCLUDE });
     });
 
     return NextResponse.json({ lead });

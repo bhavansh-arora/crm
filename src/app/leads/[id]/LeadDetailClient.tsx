@@ -58,8 +58,8 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
     setBusy(true);
     setFormError(null);
     try {
-      await apiRequest(`/api/leads/${leadId}`, "PATCH", { status });
-      mutate();
+      const res = await apiRequest<{ lead: LeadDetail }>(`/api/leads/${leadId}`, "PATCH", { status });
+      mutate(res, { revalidate: false });
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Failed to update status");
     } finally {
@@ -71,8 +71,10 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
     setBusy(true);
     setFormError(null);
     try {
-      await apiRequest(`/api/leads/${leadId}`, "PATCH", { assignedToId: assignedToId || null });
-      mutate();
+      const res = await apiRequest<{ lead: LeadDetail }>(`/api/leads/${leadId}`, "PATCH", {
+        assignedToId: assignedToId || null,
+      });
+      mutate(res, { revalidate: false });
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Failed to reassign lead");
     } finally {
@@ -84,8 +86,10 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
     setBusy(true);
     setFormError(null);
     try {
-      await apiRequest(`/api/leads/${leadId}`, "PATCH", { temperature: temperature || null });
-      mutate();
+      const res = await apiRequest<{ lead: LeadDetail }>(`/api/leads/${leadId}`, "PATCH", {
+        temperature: temperature || null,
+      });
+      mutate(res, { revalidate: false });
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Failed to update temperature");
     } finally {
@@ -134,7 +138,13 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-          <PitchedAmountEditor leadId={leadId} value={lead.value} busy={busy} onSaved={mutate} onError={setFormError} />
+          <PitchedAmountEditor
+            leadId={leadId}
+            value={lead.value}
+            busy={busy}
+            onSaved={(res) => mutate(res, { revalidate: false })}
+            onError={setFormError}
+          />
           <Info label="Phone" value={lead.phone || "—"} />
           <Info label="Email" value={lead.email || "—"} />
           <Info label="Source" value={lead.source || "—"} />
@@ -640,7 +650,7 @@ function PitchedAmountEditor({
   leadId: string;
   value: number;
   busy: boolean;
-  onSaved: () => void;
+  onSaved: (res: { lead: LeadDetail }) => void;
   onError: (msg: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -651,9 +661,11 @@ function PitchedAmountEditor({
     setSaving(true);
     onError(null);
     try {
-      await apiRequest(`/api/leads/${leadId}`, "PATCH", { value: Number(input) || 0 });
+      const res = await apiRequest<{ lead: LeadDetail }>(`/api/leads/${leadId}`, "PATCH", {
+        value: Number(input) || 0,
+      });
       setEditing(false);
-      onSaved();
+      onSaved(res);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to update amount");
     } finally {

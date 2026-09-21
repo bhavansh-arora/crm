@@ -3,7 +3,7 @@
 import useSWR from "swr";
 import Link from "next/link";
 import { useState } from "react";
-import { fetcher } from "@/lib/fetcher";
+import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatCurrency, formatDateTime, relativeTime } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
@@ -30,6 +30,10 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("");
   const [sort, setSort] = useState("updated_desc");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkAssignee, setBulkAssignee] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
 
   const params = new URLSearchParams();
   if (status) params.set("status", status);
@@ -39,7 +43,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
   if (filter) params.set("filter", filter);
   if (sort) params.set("sort", sort);
 
-  const { data, isLoading } = useSWR<{ leads: LeadListItem[] }>(
+  const { data, isLoading, mutate } = useSWR<{ leads: LeadListItem[] }>(
     `/api/leads?${params.toString()}`,
     fetcher
   );
@@ -50,6 +54,37 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
 
   const leads = data?.leads || [];
   const reps = (teamData?.users || []).filter((u) => u.role === "SALES_REP" && u.active);
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelected((prev) => (prev.size === leads.length ? new Set() : new Set(leads.map((l) => l.id))));
+  }
+
+  async function bulkAssign() {
+    setBulkBusy(true);
+    setBulkError(null);
+    try {
+      await apiRequest("/api/leads/bulk-assign", "PATCH", {
+        leadIds: [...selected],
+        assignedToId: bulkAssignee || null,
+      });
+      setSelected(new Set());
+      setBulkAssignee("");
+      mutate();
+    } catch (err) {
+      setBulkError(err instanceof Error ? err.message : "Failed to assign leads");
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   return (
     <div>
@@ -140,6 +175,52 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
         </select>
       </div>
 
+      {isAdmin && leads.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selected.size === leads.length}
+              onChange={toggleSelectAll}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            <span className="text-slate-600">
+              {selected.size > 0 ? `${selected.size} selected` : "Select all"}
+            </span>
+          </label>
+          {selected.size > 0 && (
+            <>
+              <select
+                value={bulkAssignee}
+                onChange={(e) => setBulkAssignee(e.target.value)}
+                className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              >
+                <option value="">Unassign</option>
+                {reps.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={bulkAssign}
+                disabled={bulkBusy}
+                className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+              >
+                {bulkBusy ? "Assigning…" : `Assign ${selected.size} lead${selected.size === 1 ? "" : "s"}`}
+              </button>
+              <button
+                onClick={() => setSelected(new Set())}
+                className="text-xs text-slate-500 hover:text-slate-700"
+              >
+                Clear
+              </button>
+            </>
+          )}
+          {bulkError && <span className="text-xs text-rose-600">{bulkError}</span>}
+        </div>
+      )}
+
       {isLoading && <p className="text-sm text-slate-500">Loading leads…</p>}
       {!isLoading && leads.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
@@ -152,36 +233,45 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
           const nextFollowUp = lead.followUps[0];
           const overdue = nextFollowUp && new Date(nextFollowUp.dueAt).getTime() < Date.now();
           return (
-            <Link
-              key={lead.id}
-              href={`/leads/${lead.id}`}
-              className="block rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-slate-900">{lead.name}</p>
-                  <p className="truncate text-sm text-slate-500">
-                    {lead.company || "—"} {lead.phone ? `· ${lead.phone}` : ""}
-                  </p>
+            <div key={lead.id} className="flex items-start gap-2">
+              {isAdmin && (
+                <input
+                  type="checkbox"
+                  checked={selected.has(lead.id)}
+                  onChange={() => toggleSelected(lead.id)}
+                  className="mt-4 h-4 w-4 shrink-0 rounded border-slate-300"
+                />
+              )}
+              <Link
+                href={`/leads/${lead.id}`}
+                className="block flex-1 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-slate-900">{lead.name}</p>
+                    <p className="truncate text-sm text-slate-500">
+                      {lead.company || "—"} {lead.phone ? `· ${lead.phone}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <TemperatureBadge temperature={lead.temperature} />
+                    <StatusBadge status={lead.status} />
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <TemperatureBadge temperature={lead.temperature} />
-                  <StatusBadge status={lead.status} />
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                  <span className="font-semibold text-slate-700">{formatCurrency(lead.value)}</span>
+                  <span>{lead.assignedTo ? `👤 ${lead.assignedTo.name}` : "Unassigned"}</span>
+                  <span>{lead._count.activities} activity log entries</span>
+                  {nextFollowUp && (
+                    <span className={overdue ? "font-medium text-rose-600" : "text-amber-600"}>
+                      ⏰ {overdue ? "Overdue" : "Due"} {formatDateTime(nextFollowUp.dueAt)}
+                      {lead._count.followUps > 1 ? ` (+${lead._count.followUps - 1} more)` : ""}
+                    </span>
+                  )}
+                  <span className="ml-auto">Updated {relativeTime(lead.updatedAt)}</span>
                 </div>
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                <span className="font-semibold text-slate-700">{formatCurrency(lead.value)}</span>
-                <span>{lead.assignedTo ? `👤 ${lead.assignedTo.name}` : "Unassigned"}</span>
-                <span>{lead._count.activities} activity log entries</span>
-                {nextFollowUp && (
-                  <span className={overdue ? "font-medium text-rose-600" : "text-amber-600"}>
-                    ⏰ {overdue ? "Overdue" : "Due"} {formatDateTime(nextFollowUp.dueAt)}
-                    {lead._count.followUps > 1 ? ` (+${lead._count.followUps - 1} more)` : ""}
-                  </span>
-                )}
-                <span className="ml-auto">Updated {relativeTime(lead.updatedAt)}</span>
-              </div>
-            </Link>
+              </Link>
+            </div>
           );
         })}
       </div>
