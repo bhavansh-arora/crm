@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
+import { isMailConfigured, sendMail } from "@/lib/mail";
 
 // Call this endpoint from an external scheduler (e.g. Vercel Cron, a GitHub
 // Action, or plain cron + curl) every few minutes. It emails sales reps
@@ -26,42 +26,20 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  const smtpConfigured = Boolean(process.env.SMTP_HOST);
-  let transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
-
-  if (smtpConfigured) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: process.env.SMTP_USER
-        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD }
-        : undefined,
-    });
-  }
-
+  const smtpConfigured = isMailConfigured();
   const results: { leadName: string; to: string | null; sent: boolean }[] = [];
 
   for (const followUp of dueFollowUps) {
     const to = followUp.user?.email ?? null;
 
-    if (transporter && to) {
-      try {
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || "CRM Reminders <reminders@example.com>",
+    const sent = to
+      ? await sendMail({
           to,
           subject: `Follow-up due: ${followUp.lead.name}${followUp.lead.company ? ` (${followUp.lead.company})` : ""}`,
           text: `Reminder: your follow-up for ${followUp.lead.name} is due.\n\nNote: ${followUp.note || "(no note)"}`,
-        });
-        results.push({ leadName: followUp.lead.name, to, sent: true });
-      } catch (err) {
-        console.error("Failed to send reminder email", err);
-        results.push({ leadName: followUp.lead.name, to, sent: false });
-        continue;
-      }
-    } else {
-      results.push({ leadName: followUp.lead.name, to, sent: false });
-    }
+        })
+      : false;
+    results.push({ leadName: followUp.lead.name, to, sent });
 
     await prisma.followUp.update({
       where: { id: followUp.id },

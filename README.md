@@ -198,6 +198,11 @@ result and an error saying it isn't set up).
    in real time.
 3. Without step 2, payment status only updates when someone clicks the
    "Check status" button on the lead — still correct, just not automatic.
+4. The moment a payment is confirmed paid (via the webhook, or "Check
+   status"), a receipt email goes out automatically to the rep who
+   generated the link and to every admin, with the amount, lead, and
+   payment link — reusing the same `SMTP_*` settings as follow-up reminder
+   emails. If `SMTP_HOST` isn't set, this is skipped (logged, not an error).
 
 Redeploy/restart after setting these.
 

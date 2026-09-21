@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { sendPaymentReceiptEmail } from "@/lib/mail";
 
 // Configure this URL in Razorpay Dashboard → Settings → Webhooks, with the
 // "payment_link.paid" event enabled, and set RAZORPAY_WEBHOOK_SECRET to the
@@ -30,13 +31,25 @@ export async function POST(req: NextRequest) {
 
   if (linkEntity?.id) {
     const status = String(linkEntity.status || "").toUpperCase();
-    await prisma.paymentLink.updateMany({
-      where: { razorpayId: linkEntity.id },
-      data: {
-        status,
-        paidAt: status === "PAID" ? new Date() : undefined,
-      },
-    });
+    const existing = await prisma.paymentLink.findUnique({ where: { razorpayId: linkEntity.id } });
+
+    if (existing) {
+      const updated = await prisma.paymentLink.update({
+        where: { id: existing.id },
+        data: {
+          status,
+          paidAt: status === "PAID" ? (existing.paidAt ?? new Date()) : existing.paidAt,
+        },
+        include: {
+          lead: { select: { name: true, company: true } },
+          createdBy: { select: { name: true, email: true } },
+        },
+      });
+
+      if (status === "PAID" && existing.status !== "PAID") {
+        await sendPaymentReceiptEmail(updated);
+      }
+    }
   }
 
   return NextResponse.json({ received: true });

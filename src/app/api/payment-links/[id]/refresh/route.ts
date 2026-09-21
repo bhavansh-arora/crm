@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, ApiError, handleApiError } from "@/lib/api-auth";
 import { getPaymentLink } from "@/lib/razorpay";
+import { sendPaymentReceiptEmail } from "@/lib/mail";
 
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,6 +20,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
     const rzpLink = await getPaymentLink(paymentLink.razorpayId);
     const status = rzpLink.status.toUpperCase();
+    const wasPaid = paymentLink.status === "PAID";
 
     const updated = await prisma.paymentLink.update({
       where: { id },
@@ -26,8 +28,15 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         status,
         paidAt: status === "PAID" ? (paymentLink.paidAt ?? new Date()) : paymentLink.paidAt,
       },
-      include: { createdBy: { select: { id: true, name: true } } },
+      include: {
+        lead: { select: { name: true, company: true } },
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
     });
+
+    if (status === "PAID" && !wasPaid) {
+      await sendPaymentReceiptEmail(updated);
+    }
 
     return NextResponse.json({ paymentLink: updated });
   } catch (error) {
