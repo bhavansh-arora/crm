@@ -126,6 +126,10 @@ CRON_SECRET_VALUE="$(grep '^CRON_SECRET=' .env | cut -d'"' -f2)"
 CRON_LINE="*/10 * * * * curl -s -H \"Authorization: Bearer $CRON_SECRET_VALUE\" http://localhost/api/cron/reminders >/dev/null 2>&1"
 ( crontab -l 2>/dev/null | grep -v "api/cron/reminders" ; echo "$CRON_LINE" ) | crontab -
 
+echo "==> Scheduling a daily database backup (self-hosted Postgres only, keeps 30 days)..."
+BACKUP_LINE="0 3 * * * $APP_DIR/deploy/backup-db.sh >/dev/null 2>&1"
+( crontab -l 2>/dev/null | grep -v "deploy/backup-db.sh" ; echo "$BACKUP_LINE" ) | crontab -
+
 echo ""
 echo "==================================================================="
 if [ -n "${DOMAIN:-}" ]; then
