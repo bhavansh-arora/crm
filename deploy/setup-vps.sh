@@ -94,8 +94,13 @@ if [ ! -f .env ]; then
   set_env SEED_ADMIN_PASSWORD "$ADMIN_PASSWORD"
   set_env CRON_SECRET "$CRON_SECRET"
 
+  # Caddyfile is gitignored on purpose (see Caddyfile.example) so that
+  # re-running this script never overwrites your domain/HTTPS config via
+  # git reset --hard below.
   if [ -n "$DOMAIN" ]; then
     printf '%s {\n\treverse_proxy app:3000\n}\n' "$DOMAIN" > Caddyfile
+  elif [ ! -f Caddyfile ]; then
+    cp Caddyfile.example Caddyfile
   fi
 
   echo ""

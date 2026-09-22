@@ -164,7 +164,9 @@ over plain HTTP.
 
 **Redeploying after code changes:** re-run `bash deploy/setup-vps.sh` (or, if
 already cloned, `cd /opt/crm && git pull && docker compose up -d --build`).
-Your `.env` and database are untouched.
+Your `.env`, `Caddyfile`, and database are untouched — `Caddyfile` is
+git-ignored on purpose (see `Caddyfile.example`) so redeploying can never
+wipe out your domain/HTTPS config.
 
 **Logs:** `cd /opt/crm && docker compose logs -f`
 

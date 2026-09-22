@@ -4,6 +4,7 @@ out
 build
 .env
 .env*.local
+Caddyfile
 *.db
 *.db-journal
 dev.db
