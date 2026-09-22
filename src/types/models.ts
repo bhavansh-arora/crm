@@ -12,6 +12,14 @@ export type UserSummary = {
   lastActiveAt?: string | null;
 };
 
+export type WhatsAppTemplate = {
+  id: string;
+  name: string;
+  body: string;
+  createdAt: string;
+  createdBy: UserSummary | null;
+};
+
 export type LeadListItem = {
   id: string;
   name: string;

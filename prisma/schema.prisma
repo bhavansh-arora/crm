@@ -22,10 +22,20 @@ model User {
   createdAt    DateTime   @default(now())
   lastActiveAt DateTime?
 
-  leads        Lead[]       @relation("AssignedLeads")
-  activities   Activity[]
-  followUps    FollowUp[]
-  paymentLinks PaymentLink[]
+  leads             Lead[]       @relation("AssignedLeads")
+  activities        Activity[]
+  followUps         FollowUp[]
+  paymentLinks      PaymentLink[]
+  whatsAppTemplates WhatsAppTemplate[]
+}
+
+model WhatsAppTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  body        String
+  createdAt   DateTime @default(now())
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+  createdById String?
 }
 
 model LeadSource {

@@ -48,6 +48,15 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
 - **Payment links (optional, needs Razorpay keys)**: generate a Razorpay
   payment link from any lead, share it, and see whether it's been paid —
   updated automatically via webhook, or on demand with "Check status".
+- **One-touch calling**: a Call button on every lead dials out via the
+  device's phone app (`tel:` link — works great on mobile, needs a
+  softphone on desktop). A dedicated Dialer page turns this into a queue:
+  call the lead on top, log the outcome and an optional follow-up, and it
+  automatically advances to the next one.
+- **WhatsApp templates**: write reusable message templates (with a
+  `{{name}}` placeholder filled in from the lead's contact name), then send
+  one to any lead's number in one click — opens WhatsApp with the message
+  pre-filled, ready to send.
 - **Browser notifications**: opt in once, then get a real desktop
   notification the moment a follow-up becomes due, for as long as the app
   is open — no email setup required.

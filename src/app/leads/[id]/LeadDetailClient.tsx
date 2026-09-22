@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatCurrency, formatDateTime, durationSince, relativeTime } from "@/lib/format";
+import { fillTemplate, buildWhatsAppUrl } from "@/lib/phone";
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import {
@@ -20,7 +22,7 @@ import {
   PAYMENT_LINK_STATUS_COLORS,
   type CallOutcomeValue,
 } from "@/lib/constants";
-import type { LeadDetail, TeamMember, LeadSource } from "@/types/models";
+import type { LeadDetail, TeamMember, LeadSource, WhatsAppTemplate } from "@/types/models";
 
 type ComposerMode = null | "note" | "call" | "followup";
 
@@ -144,6 +146,12 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
             <StatusBadge status={lead.status} />
           </div>
         </div>
+
+        {lead.phone && (
+          <div className="mt-3">
+            <CallWhatsAppButtons phone={lead.phone} contactName={lead.contactName} leadName={lead.name} />
+          </div>
+        )}
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <PitchedAmountEditor
@@ -648,6 +656,69 @@ function EditLeadForm({
           {loading ? "Saving…" : "Save changes"}
         </button>
       </div>
+    </div>
+  );
+}
+
+export function CallWhatsAppButtons({
+  phone,
+  contactName,
+  leadName,
+}: {
+  phone: string;
+  contactName: string | null;
+  leadName: string;
+}) {
+  const [showTemplates, setShowTemplates] = useState(false);
+  const { data } = useSWR<{ templates: WhatsAppTemplate[] }>("/api/whatsapp-templates", fetcher);
+  const templates = data?.templates || [];
+
+  function sendWhatsApp(template: WhatsAppTemplate) {
+    const message = fillTemplate(template.body, { name: contactName || leadName });
+    window.open(buildWhatsAppUrl(phone, message), "_blank");
+    setShowTemplates(false);
+  }
+
+  return (
+    <div className="relative flex items-center gap-2">
+      <a
+        href={`tel:${phone}`}
+        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+      >
+        📞 Call {phone}
+      </a>
+      <button
+        onClick={() => setShowTemplates((v) => !v)}
+        className="rounded-lg bg-[#25D366] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+      >
+        💬 WhatsApp
+      </button>
+
+      {showTemplates && (
+        <div className="absolute left-0 top-full z-10 mt-1 w-64 rounded-xl bg-white p-2 shadow-lg ring-1 ring-slate-200">
+          {templates.length === 0 ? (
+            <p className="p-2 text-xs text-slate-500">
+              No templates yet —{" "}
+              <Link href="/templates" className="underline hover:text-brand-700">
+                add one
+              </Link>
+              .
+            </p>
+          ) : (
+            <div className="max-h-64 space-y-1 overflow-y-auto">
+              {templates.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => sendWhatsApp(t)}
+                  className="block w-full rounded-lg px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

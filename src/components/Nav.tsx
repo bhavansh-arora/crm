@@ -17,13 +17,20 @@ const ADMIN_ITEMS: NavItem[] = [
 // Shown in the top nav / mobile menu but not the bottom tab bar, to keep
 // that bar to the 4 most-used destinations.
 const ADMIN_SECONDARY_ITEMS: NavItem[] = [
+  { href: "/dialer", label: "Dialer", icon: "📞" },
   { href: "/sources", label: "Sources", icon: "🏷️" },
   { href: "/activity", label: "Activity", icon: "📈" },
+  { href: "/templates", label: "WhatsApp Templates", icon: "💬" },
 ];
 
 const REP_ITEMS: NavItem[] = [
   { href: "/leads", label: "My Leads", icon: "🗂️" },
+  { href: "/dialer", label: "Dialer", icon: "📞" },
   { href: "/followups", label: "Follow-ups", icon: "⏰" },
+];
+
+const REP_SECONDARY_ITEMS: NavItem[] = [
+  { href: "/templates", label: "WhatsApp Templates", icon: "💬" },
 ];
 
 export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SALES_REP" }) {
@@ -31,7 +38,7 @@ export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SAL
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const items = role === "ADMIN" ? ADMIN_ITEMS : REP_ITEMS;
-  const secondaryItems = role === "ADMIN" ? ADMIN_SECONDARY_ITEMS : [];
+  const secondaryItems = role === "ADMIN" ? ADMIN_SECONDARY_ITEMS : REP_SECONDARY_ITEMS;
 
   function isActive(href: string) {
     return pathname === href || pathname.startsWith(href + "/");
