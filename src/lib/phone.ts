@@ -14,6 +14,16 @@ export function fillTemplate(body: string, values: { name: string }): string {
   return body.replace(/\{\{\s*name\s*\}\}/gi, values.name);
 }
 
+// wa.me only pre-fills text -- there's no way to attach an image file or add
+// real interactive/URL buttons without the paid, Meta-approved WhatsApp
+// Business API. The closest we can do here: a direct image URL on its own
+// line, which WhatsApp auto-expands into a link preview with thumbnail, and
+// any plain URL in the text becomes a tappable link on its own (no special
+// handling needed for that part).
+export function buildWhatsAppMessage(body: string, imageUrl?: string | null): string {
+  return imageUrl ? `${body}\n\n${imageUrl}` : body;
+}
+
 export function buildWhatsAppUrl(phone: string, message: string): string {
   const number = toWhatsAppNumber(phone);
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;

@@ -6,6 +6,7 @@ import { requireSession, handleApiError } from "@/lib/api-auth";
 const createTemplateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   body: z.string().min(1, "Message body is required"),
+  imageUrl: z.string().url("Must be a valid URL").optional().or(z.literal("")),
 });
 
 export async function GET() {
@@ -28,7 +29,12 @@ export async function POST(req: NextRequest) {
     const data = createTemplateSchema.parse(body);
 
     const template = await prisma.whatsAppTemplate.create({
-      data: { name: data.name, body: data.body, createdById: session.user.id },
+      data: {
+        name: data.name,
+        body: data.body,
+        imageUrl: data.imageUrl || null,
+        createdById: session.user.id,
+      },
       include: { createdBy: { select: { id: true, name: true } } },
     });
 

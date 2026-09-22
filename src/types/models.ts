@@ -16,6 +16,7 @@ export type WhatsAppTemplate = {
   id: string;
   name: string;
   body: string;
+  imageUrl: string | null;
   createdAt: string;
   createdBy: UserSummary | null;
 };

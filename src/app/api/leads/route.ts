@@ -67,14 +67,16 @@ export async function GET(req: NextRequest) {
       where.statusChangedAt = { lt: staleBefore };
     }
 
-    const orderBy: Record<string, "asc" | "desc"> =
+    // Arrays (not a single object) so ties get a stable, predictable
+    // secondary order instead of whatever order Postgres feels like.
+    const orderBy =
       sort === "value_desc"
-        ? { value: "desc" }
+        ? [{ value: "desc" as const }]
         : sort === "stale_first"
-          ? { statusChangedAt: "asc" }
+          ? [{ statusChangedAt: "asc" as const }]
           : sort === "source_asc"
-            ? { source: "asc" }
-            : { updatedAt: "desc" };
+            ? [{ source: { sort: "asc" as const, nulls: "last" as const } }, { name: "asc" as const }]
+            : [{ updatedAt: "desc" as const }];
 
     const leads = await prisma.lead.findMany({
       where,

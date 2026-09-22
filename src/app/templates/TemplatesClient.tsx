@@ -15,6 +15,7 @@ export default function TemplatesClient() {
   );
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -26,9 +27,14 @@ export default function TemplatesClient() {
     setLoading(true);
     setError(null);
     try {
-      await apiRequest("/api/whatsapp-templates", "POST", { name: name.trim(), body: body.trim() });
+      await apiRequest("/api/whatsapp-templates", "POST", {
+        name: name.trim(),
+        body: body.trim(),
+        imageUrl: imageUrl.trim() || undefined,
+      });
       setName("");
       setBody("");
+      setImageUrl("");
       mutate();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save template");
@@ -51,9 +57,15 @@ export default function TemplatesClient() {
   return (
     <div className="mx-auto max-w-xl">
       <h1 className="mb-1 text-2xl font-semibold text-slate-900">WhatsApp Templates</h1>
-      <p className="mb-5 text-sm text-slate-500">
+      <p className="mb-2 text-sm text-slate-500">
         Shared with the whole team. Use <code className="rounded bg-slate-100 px-1 py-0.5">{"{{name}}"}</code>{" "}
-        in the message and it&apos;ll be swapped for the lead&apos;s contact name (or lead name) when sent.
+        in the message and it&apos;ll be swapped for the lead&apos;s contact name (or lead name) when sent. Any
+        link you type directly in the message becomes a tappable button automatically — no button field needed.
+      </p>
+      <p className="mb-5 text-sm text-slate-500">
+        <strong>Note:</strong> sending goes through a plain WhatsApp link, not the paid WhatsApp Business API —
+        so a real file attachment isn&apos;t possible. If you add an Image URL below, WhatsApp will show a
+        preview thumbnail of it under the message instead.
       </p>
 
       {error && (
@@ -72,6 +84,12 @@ export default function TemplatesClient() {
           onChange={(e) => setBody(e.target.value)}
           placeholder={"Hi {{name}}, following up on our call..."}
           rows={3}
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        />
+        <input
+          value={imageUrl}
+          onChange={(e) => setImageUrl(e.target.value)}
+          placeholder="Image URL (optional) — shows as a preview thumbnail"
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
         <button
@@ -99,6 +117,7 @@ export default function TemplatesClient() {
                 <div className="min-w-0">
                   <p className="font-medium text-slate-900">{t.name}</p>
                   <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{t.body}</p>
+                  {t.imageUrl && <p className="mt-1 truncate text-xs text-brand-600">📷 {t.imageUrl}</p>}
                   <p className="mt-1.5 text-xs text-slate-400">
                     {t.createdBy?.name || "Unknown"} · {relativeTime(t.createdAt)}
                   </p>

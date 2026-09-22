@@ -7,7 +7,7 @@ import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatCurrency, relativeTime } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
-import { CallWhatsAppButtons } from "@/app/leads/[id]/LeadDetailClient";
+import { CallWhatsAppButtons, CompanyWebsiteEditor } from "@/app/leads/[id]/LeadDetailClient";
 import { OPEN_STATUSES, CALL_OUTCOMES, CALL_OUTCOME_LABELS, type CallOutcomeValue } from "@/lib/constants";
 import type { LeadListItem } from "@/types/models";
 
@@ -136,10 +136,31 @@ export default function DialerClient() {
                 <Link href={`/leads/${current.id}`} className="font-semibold text-slate-900 hover:underline">
                   {current.name}
                 </Link>
-                <p className="truncate text-sm text-slate-500">
-                  {current.contactName ? `👤 ${current.contactName} · ` : ""}
-                  {current.company || "No company"}
-                </p>
+                <CompanyWebsiteEditor
+                  leadId={current.id}
+                  contactName={current.contactName}
+                  company={current.company}
+                  website={current.website}
+                  busy={saving}
+                  onSaved={(res) => {
+                    mutate((prev) => {
+                      if (!prev) return prev;
+                      return {
+                        leads: prev.leads.map((l) =>
+                          l.id === current.id
+                            ? {
+                                ...l,
+                                contactName: res.lead.contactName,
+                                company: res.lead.company,
+                                website: res.lead.website,
+                              }
+                            : l
+                        ),
+                      };
+                    }, { revalidate: false });
+                  }}
+                  onError={setError}
+                />
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <TemperatureBadge temperature={current.temperature} />

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatCurrency, formatDateTime, durationSince, relativeTime } from "@/lib/format";
-import { fillTemplate, buildWhatsAppUrl } from "@/lib/phone";
+import { fillTemplate, buildWhatsAppMessage, buildWhatsAppUrl } from "@/lib/phone";
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import {
@@ -674,7 +674,8 @@ export function CallWhatsAppButtons({
   const templates = data?.templates || [];
 
   function sendWhatsApp(template: WhatsAppTemplate) {
-    const message = fillTemplate(template.body, { name: contactName || leadName });
+    const filled = fillTemplate(template.body, { name: contactName || leadName });
+    const message = buildWhatsAppMessage(filled, template.imageUrl);
     window.open(buildWhatsAppUrl(phone, message), "_blank");
     setShowTemplates(false);
   }
@@ -712,6 +713,7 @@ export function CallWhatsAppButtons({
                   onClick={() => sendWhatsApp(t)}
                   className="block w-full rounded-lg px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100"
                 >
+                  {t.imageUrl && "📷 "}
                   {t.name}
                 </button>
               ))}
@@ -723,7 +725,7 @@ export function CallWhatsAppButtons({
   );
 }
 
-function CompanyWebsiteEditor({
+export function CompanyWebsiteEditor({
   leadId,
   contactName,
   company,
