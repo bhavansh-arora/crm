@@ -6,6 +6,7 @@ import { LEAD_STATUSES, LEAD_TEMPERATURES, OPEN_STATUSES } from "@/lib/constants
 
 const createLeadSchema = z.object({
   name: z.string().min(1, "Name is required"),
+  contactName: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional(),
   company: z.string().optional(),
@@ -105,6 +106,7 @@ export async function POST(req: NextRequest) {
     const lead = await prisma.lead.create({
       data: {
         name: data.name,
+        contactName: data.contactName || null,
         email: data.email || null,
         phone: data.phone || null,
         company: data.company || null,

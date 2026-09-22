@@ -15,6 +15,7 @@ export type UserSummary = {
 export type LeadListItem = {
   id: string;
   name: string;
+  contactName: string | null;
   email: string | null;
   phone: string | null;
   company: string | null;

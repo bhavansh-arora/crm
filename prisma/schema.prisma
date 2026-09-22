@@ -38,6 +38,7 @@ model LeadSource {
 model Lead {
   id              String    @id @default(cuid())
   name            String
+  contactName     String?
   email           String?
   phone           String?
   company         String?

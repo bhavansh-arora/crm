@@ -17,6 +17,7 @@ export default function NewLeadForm() {
 
   const [form, setForm] = useState({
     name: "",
+    contactName: "",
     email: "",
     phone: "",
     company: "",
@@ -71,6 +72,15 @@ export default function NewLeadForm() {
             onChange={(e) => update("name", e.target.value)}
             className="input"
             placeholder="Jane Doe"
+          />
+        </Field>
+
+        <Field label="Contact Name">
+          <input
+            value={form.contactName}
+            onChange={(e) => update("contactName", e.target.value)}
+            className="input"
+            placeholder="Person you spoke with, if different"
           />
         </Field>
 

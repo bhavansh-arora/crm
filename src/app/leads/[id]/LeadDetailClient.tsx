@@ -131,6 +131,7 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
             <h1 className="text-xl font-semibold text-slate-900">{lead.name}</h1>
             <CompanyWebsiteEditor
               leadId={leadId}
+              contactName={lead.contactName}
               company={lead.company}
               website={lead.website}
               busy={busy}
@@ -584,6 +585,7 @@ function EditLeadForm({
 }) {
   const [form, setForm] = useState({
     name: lead.name,
+    contactName: lead.contactName || "",
     email: lead.email || "",
     phone: lead.phone || "",
     company: lead.company || "",
@@ -613,6 +615,7 @@ function EditLeadForm({
   return (
     <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2">
       <LabeledInput label="Name" value={form.name} onChange={(v) => update("name", v)} />
+      <LabeledInput label="Contact Name" value={form.contactName} onChange={(v) => update("contactName", v)} />
       <LabeledInput label="Email" value={form.email} onChange={(v) => update("email", v)} />
       <LabeledInput label="Phone" value={form.phone} onChange={(v) => update("phone", v)} />
       <LabeledInput label="Company" value={form.company} onChange={(v) => update("company", v)} />
@@ -651,6 +654,7 @@ function EditLeadForm({
 
 function CompanyWebsiteEditor({
   leadId,
+  contactName,
   company,
   website,
   busy,
@@ -658,6 +662,7 @@ function CompanyWebsiteEditor({
   onError,
 }: {
   leadId: string;
+  contactName: string | null;
   company: string | null;
   website: string | null;
   busy: boolean;
@@ -665,6 +670,7 @@ function CompanyWebsiteEditor({
   onError: (msg: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [contactNameInput, setContactNameInput] = useState(contactName || "");
   const [companyInput, setCompanyInput] = useState(company || "");
   const [websiteInput, setWebsiteInput] = useState(website || "");
   const [saving, setSaving] = useState(false);
@@ -674,42 +680,53 @@ function CompanyWebsiteEditor({
     onError(null);
     try {
       const res = await apiRequest<{ lead: LeadDetail }>(`/api/leads/${leadId}`, "PATCH", {
+        contactName: contactNameInput.trim() || null,
         company: companyInput.trim() || null,
         website: websiteInput.trim() || null,
       });
       setEditing(false);
       onSaved(res);
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to update company/website");
+      onError(err instanceof Error ? err.message : "Failed to update contact/company/website");
     } finally {
       setSaving(false);
     }
   }
 
   if (!editing) {
+    const hasAny = contactName || company || website;
     return (
       <button
         onClick={() => {
+          setContactNameInput(contactName || "");
           setCompanyInput(company || "");
           setWebsiteInput(website || "");
           setEditing(true);
         }}
         className="mt-0.5 block text-left text-sm text-slate-500 underline decoration-dotted underline-offset-2 hover:text-brand-700"
       >
-        {company || "No company"}
+        {contactName && <>👤 {contactName}</>}
+        {contactName && (company || website) && " · "}
+        {company || (!contactName && !website ? "No company" : "")}
         {website && (
           <>
-            {" · "}
+            {(contactName || company) && " · "}
             <span className="text-brand-600">{website}</span>
           </>
         )}
-        {!company && !website && " (add company/website)"}
+        {!hasAny && "No company (add contact/company/website)"}
       </button>
     );
   }
 
   return (
     <div className="mt-1 flex flex-col gap-1.5 sm:flex-row sm:items-center">
+      <input
+        value={contactNameInput}
+        onChange={(e) => setContactNameInput(e.target.value)}
+        placeholder="Contact name"
+        className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+      />
       <input
         value={companyInput}
         onChange={(e) => setCompanyInput(e.target.value)}
