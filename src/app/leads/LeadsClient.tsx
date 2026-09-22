@@ -3,6 +3,7 @@
 import useSWR from "swr";
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatCurrency, formatDateTime, relativeTime } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
@@ -24,27 +25,34 @@ const SORT_OPTIONS = [
 ] as const;
 
 export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
-  const [status, setStatus] = useState("");
-  const [temperature, setTemperature] = useState("");
-  const [assignedToId, setAssignedToId] = useState("");
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<string>("");
-  const [sort, setSort] = useState("updated_desc");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Filters/sort live in the URL (not local state) so that clicking into a
+  // lead and going back restores exactly what was set, instead of resetting
+  // to defaults on remount.
+  const status = searchParams.get("status") || "";
+  const temperature = searchParams.get("temperature") || "";
+  const assignedToId = searchParams.get("assignedToId") || "";
+  const search = searchParams.get("search") || "";
+  const filter = searchParams.get("filter") || "";
+  const sort = searchParams.get("sort") || "updated_desc";
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAssignee, setBulkAssignee] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
 
-  const params = new URLSearchParams();
-  if (status) params.set("status", status);
-  if (temperature) params.set("temperature", temperature);
-  if (assignedToId) params.set("assignedToId", assignedToId);
-  if (search) params.set("search", search);
-  if (filter) params.set("filter", filter);
-  if (sort) params.set("sort", sort);
+  function updateParam(key: string, value: string) {
+    const next = new URLSearchParams(searchParams.toString());
+    if (value) next.set(key, value);
+    else next.delete(key);
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+  }
 
   const { data, isLoading, mutate } = useSWR<{ leads: LeadListItem[] }>(
-    `/api/leads?${params.toString()}`,
+    `/api/leads?${searchParams.toString()}`,
     fetcher
   );
   const { data: teamData } = useSWR<{ users: TeamMember[] }>(
@@ -104,7 +112,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
         {QUICK_FILTERS.map((f) => (
           <button
             key={f.value}
-            onClick={() => setFilter(f.value)}
+            onClick={() => updateParam("filter", f.value)}
             className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
               filter === f.value
                 ? "bg-brand-600 text-white ring-brand-600"
@@ -119,13 +127,13 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => updateParam("search", e.target.value)}
           placeholder="Search by name, company, phone…"
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:max-w-xs"
         />
         <select
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => updateParam("status", e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         >
           <option value="">All statuses</option>
@@ -137,7 +145,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
         </select>
         <select
           value={temperature}
-          onChange={(e) => setTemperature(e.target.value)}
+          onChange={(e) => updateParam("temperature", e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         >
           <option value="">Any temperature</option>
@@ -150,7 +158,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
         {isAdmin && (
           <select
             value={assignedToId}
-            onChange={(e) => setAssignedToId(e.target.value)}
+            onChange={(e) => updateParam("assignedToId", e.target.value)}
             className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
           >
             <option value="">Everyone</option>
@@ -164,7 +172,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
         )}
         <select
           value={sort}
-          onChange={(e) => setSort(e.target.value)}
+          onChange={(e) => updateParam("sort", e.target.value)}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         >
           {SORT_OPTIONS.map((s) => (
