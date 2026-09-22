@@ -127,9 +127,16 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
       {/* Header card */}
       <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-semibold text-slate-900">{lead.name}</h1>
-            <p className="text-sm text-slate-500">{lead.company || "No company"}</p>
+            <CompanyWebsiteEditor
+              leadId={leadId}
+              company={lead.company}
+              website={lead.website}
+              busy={busy}
+              onSaved={(res) => mutate(res, { revalidate: false })}
+              onError={setFormError}
+            />
           </div>
           <div className="flex items-center gap-2">
             <TemperatureBadge temperature={lead.temperature} />
@@ -580,6 +587,7 @@ function EditLeadForm({
     email: lead.email || "",
     phone: lead.phone || "",
     company: lead.company || "",
+    website: lead.website || "",
     source: lead.source || "",
     value: String(lead.value),
   });
@@ -608,6 +616,7 @@ function EditLeadForm({
       <LabeledInput label="Email" value={form.email} onChange={(v) => update("email", v)} />
       <LabeledInput label="Phone" value={form.phone} onChange={(v) => update("phone", v)} />
       <LabeledInput label="Company" value={form.company} onChange={(v) => update("company", v)} />
+      <LabeledInput label="Website" value={form.website} onChange={(v) => update("website", v)} />
       <div>
         <label className="mb-1 block text-xs font-medium text-slate-500">Source</label>
         <select
@@ -634,6 +643,99 @@ function EditLeadForm({
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
         >
           {loading ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CompanyWebsiteEditor({
+  leadId,
+  company,
+  website,
+  busy,
+  onSaved,
+  onError,
+}: {
+  leadId: string;
+  company: string | null;
+  website: string | null;
+  busy: boolean;
+  onSaved: (res: { lead: LeadDetail }) => void;
+  onError: (msg: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [companyInput, setCompanyInput] = useState(company || "");
+  const [websiteInput, setWebsiteInput] = useState(website || "");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    onError(null);
+    try {
+      const res = await apiRequest<{ lead: LeadDetail }>(`/api/leads/${leadId}`, "PATCH", {
+        company: companyInput.trim() || null,
+        website: websiteInput.trim() || null,
+      });
+      setEditing(false);
+      onSaved(res);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to update company/website");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => {
+          setCompanyInput(company || "");
+          setWebsiteInput(website || "");
+          setEditing(true);
+        }}
+        className="mt-0.5 block text-left text-sm text-slate-500 underline decoration-dotted underline-offset-2 hover:text-brand-700"
+      >
+        {company || "No company"}
+        {website && (
+          <>
+            {" · "}
+            <span className="text-brand-600">{website}</span>
+          </>
+        )}
+        {!company && !website && " (add company/website)"}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-1 flex flex-col gap-1.5 sm:flex-row sm:items-center">
+      <input
+        value={companyInput}
+        onChange={(e) => setCompanyInput(e.target.value)}
+        placeholder="Company name"
+        className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+      />
+      <input
+        value={websiteInput}
+        onChange={(e) => setWebsiteInput(e.target.value)}
+        placeholder="Website (e.g. example.com)"
+        className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+      />
+      <div className="flex gap-1">
+        <button
+          onClick={save}
+          disabled={saving || busy}
+          className="rounded-lg bg-brand-600 px-2 py-1 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+        >
+          ✓
+        </button>
+        <button
+          onClick={() => setEditing(false)}
+          disabled={saving}
+          className="rounded-lg px-2 py-1 text-xs text-slate-500 ring-1 ring-slate-200 hover:bg-slate-50"
+        >
+          ✕
         </button>
       </div>
     </div>

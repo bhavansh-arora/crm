@@ -20,6 +20,7 @@ export default function NewLeadForm() {
     email: "",
     phone: "",
     company: "",
+    website: "",
     source: "",
     value: "",
     status: "NEW",
@@ -102,6 +103,17 @@ export default function NewLeadForm() {
               placeholder="Acme Inc."
             />
           </Field>
+          <Field label="Website">
+            <input
+              value={form.website}
+              onChange={(e) => update("website", e.target.value)}
+              className="input"
+              placeholder="acme.com"
+            />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4">
           <Field label="Source">
             <select value={form.source} onChange={(e) => update("source", e.target.value)} className="input">
               <option value="">—</option>

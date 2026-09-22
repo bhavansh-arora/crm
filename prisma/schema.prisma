@@ -41,6 +41,7 @@ model Lead {
   email           String?
   phone           String?
   company         String?
+  website         String?
   source          String?
   value           Float     @default(0)
   status          String    @default("NEW") // see LEAD_STATUSES

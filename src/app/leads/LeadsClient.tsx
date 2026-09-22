@@ -22,6 +22,7 @@ const SORT_OPTIONS = [
   { value: "updated_desc", label: "Recently updated" },
   { value: "value_desc", label: "Highest value" },
   { value: "stale_first", label: "Longest since status change" },
+  { value: "source_asc", label: "Lead source" },
 ] as const;
 
 export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
@@ -269,6 +270,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                   <span className="font-semibold text-slate-700">{formatCurrency(lead.value)}</span>
                   <span>{lead.assignedTo ? `👤 ${lead.assignedTo.name}` : "Unassigned"}</span>
+                  {lead.source && <span>📌 {lead.source}</span>}
                   <span>{lead._count.activities} activity log entries</span>
                   {nextFollowUp && (
                     <span className={overdue ? "font-medium text-rose-600" : "text-amber-600"}>

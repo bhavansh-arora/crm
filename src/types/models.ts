@@ -18,6 +18,7 @@ export type LeadListItem = {
   email: string | null;
   phone: string | null;
   company: string | null;
+  website: string | null;
   source: string | null;
   value: number;
   status: LeadStatusValue;

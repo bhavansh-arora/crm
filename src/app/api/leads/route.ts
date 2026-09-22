@@ -9,6 +9,7 @@ const createLeadSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional(),
   company: z.string().optional(),
+  website: z.string().optional(),
   source: z.string().optional(),
   value: z.coerce.number().min(0).default(0),
   assignedToId: z.string().optional().nullable(),
@@ -70,7 +71,9 @@ export async function GET(req: NextRequest) {
         ? { value: "desc" }
         : sort === "stale_first"
           ? { statusChangedAt: "asc" }
-          : { updatedAt: "desc" };
+          : sort === "source_asc"
+            ? { source: "asc" }
+            : { updatedAt: "desc" };
 
     const leads = await prisma.lead.findMany({
       where,
@@ -105,6 +108,7 @@ export async function POST(req: NextRequest) {
         email: data.email || null,
         phone: data.phone || null,
         company: data.company || null,
+        website: data.website || null,
         source: data.source || null,
         value: data.value,
         assignedToId: data.assignedToId || null,

@@ -9,6 +9,7 @@ const updateLeadSchema = z.object({
   email: z.string().email().optional().or(z.literal("")).nullable(),
   phone: z.string().optional().nullable(),
   company: z.string().optional().nullable(),
+  website: z.string().optional().nullable(),
   source: z.string().optional().nullable(),
   value: z.coerce.number().min(0).optional(),
   assignedToId: z.string().optional().nullable(),
@@ -17,9 +18,10 @@ const updateLeadSchema = z.object({
 });
 
 // Fields a sales rep may update on their own lead: pipeline status, hot/warm/cold
-// classification, and the amount they've pitched. Everything else (contact
-// details, reassignment) is admin-only.
-const REP_EDITABLE_FIELDS = ["status", "temperature", "value"];
+// classification, the amount they've pitched, and the business name/website
+// they find while working the lead. Contact details and reassignment stay
+// admin-only.
+const REP_EDITABLE_FIELDS = ["status", "temperature", "value", "company", "website"];
 
 async function getLeadOr404(id: string) {
   const lead = await prisma.lead.findUnique({ where: { id } });
