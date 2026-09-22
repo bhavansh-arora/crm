@@ -1,6 +1,8 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # Matches Neon's Postgres 18, so a pg_dump/pg_restore of a Neon database
+    # is always version-compatible with this local instance.
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: crm
