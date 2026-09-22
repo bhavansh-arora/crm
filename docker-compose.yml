@@ -25,6 +25,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - uploads-data:/app/uploads
     expose:
       - "3000"
 
@@ -45,3 +47,4 @@ volumes:
   caddy-data:
   caddy-config:
   postgres-data:
+  uploads-data:

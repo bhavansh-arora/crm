@@ -17,10 +17,19 @@ const SORT_OPTIONS = [
   { value: "value_desc", label: "Highest value" },
 ] as const;
 
+const QUICK_FILTERS = [
+  { value: "", label: "All" },
+  { value: "due_today", label: "Due Today" },
+  { value: "overdue", label: "Overdue" },
+  { value: "stale", label: "Status Stale" },
+] as const;
+
 export default function DialerClient() {
   const [sort, setSort] = useState<string>("stale_first");
+  const [filter, setFilter] = useState<string>("");
+  const [source, setSource] = useState<string>("");
   const { data, isLoading, mutate } = useSWR<{ leads: LeadListItem[] }>(
-    `/api/leads?sort=${sort}`,
+    `/api/leads?sort=${sort}${filter ? `&filter=${filter}` : ""}`,
     fetcher
   );
   const [index, setIndex] = useState(0);
@@ -31,7 +40,9 @@ export default function DialerClient() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const queue = (data?.leads || []).filter((l) => (OPEN_STATUSES as string[]).includes(l.status));
+  const openLeads = (data?.leads || []).filter((l) => (OPEN_STATUSES as string[]).includes(l.status));
+  const sources = Array.from(new Set(openLeads.map((l) => l.source).filter((s): s is string => !!s))).sort();
+  const queue = source ? openLeads.filter((l) => l.source === source) : openLeads;
   const current = queue[index];
 
   function resetForm() {
@@ -82,30 +93,67 @@ export default function DialerClient() {
 
   return (
     <div className="mx-auto max-w-xl">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-semibold text-slate-900">Dialer</h1>
-        <div className="flex items-center gap-2">
-          {current && (
-            <span className="text-sm text-slate-500">
-              {index + 1} of {queue.length}
-            </span>
-          )}
-          <select
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value);
+        {current && (
+          <span className="text-sm text-slate-500">
+            {index + 1} of {queue.length}
+          </span>
+        )}
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {QUICK_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => {
+              setFilter(f.value);
               setIndex(0);
               resetForm();
             }}
-            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+            className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
+              filter === f.value
+                ? "bg-brand-600 text-white ring-brand-600"
+                : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
+            }`}
           >
-            {SORT_OPTIONS.map((s) => (
-              <option key={s.value} value={s.value}>
-                Order: {s.label}
-              </option>
-            ))}
-          </select>
-        </div>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <select
+          value={source}
+          onChange={(e) => {
+            setSource(e.target.value);
+            setIndex(0);
+            resetForm();
+          }}
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+        >
+          <option value="">All lead sources</option>
+          {sources.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value);
+            setIndex(0);
+            resetForm();
+          }}
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+        >
+          {SORT_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>
+              Order: {s.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {!current ? (

@@ -37,7 +37,10 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   directly on the lead; Warm leads with a pitched amount roll up into the
   Warm Pipeline stat.
 - **Leads list filtering**: quick chips for Due Today / Overdue / Status
-  Stale (no status change in 3+ days), plus sort by value or time in stage.
+  Stale (no status change in 3+ days), plus sort by value, time in stage, or
+  lead source. The Dialer has the same Due Today / Overdue / Status Stale
+  chips and a lead-source filter, so a rep can work through just their
+  overdue calls or just one campaign's leads.
 - **Admin-managed lead sources**: a Sources page to add/retire the list
   reps pick from when a lead is created — no more free-text typos.
 - **Team activity monitoring**: see who's online right now (a lightweight
@@ -56,7 +59,13 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
 - **WhatsApp templates**: write reusable message templates (with a
   `{{name}}` placeholder filled in from the lead's contact name), then send
   one to any lead's number in one click — opens WhatsApp with the message
-  pre-filled, ready to send.
+  pre-filled, ready to send. Attach an image straight from your device (no
+  need to host it yourself first — it's uploaded to the app's own server
+  and the link is generated automatically) and it shows up as a preview
+  thumbnail under the message. Any plain URL typed into the message becomes
+  a tappable link automatically. Real tappable Quick Reply buttons aren't
+  possible this way — that needs the paid, Meta-approved WhatsApp Business
+  API, not the free `wa.me` link this feature sends through.
 - **Browser notifications**: opt in once, then get a real desktop
   notification the moment a follow-up becomes due, for as long as the app
   is open — no email setup required.

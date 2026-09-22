@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import useSWR from "swr";
 import { useSession } from "next-auth/react";
 import { fetcher, apiRequest } from "@/lib/fetcher";
@@ -18,6 +18,27 @@ export default function TemplatesClient() {
   const [imageUrl, setImageUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleImageSelect(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/uploads", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setImageUrl(`${window.location.origin}${data.url}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to upload image");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   const templates = data?.templates || [];
 
@@ -60,12 +81,14 @@ export default function TemplatesClient() {
       <p className="mb-2 text-sm text-slate-500">
         Shared with the whole team. Use <code className="rounded bg-slate-100 px-1 py-0.5">{"{{name}}"}</code>{" "}
         in the message and it&apos;ll be swapped for the lead&apos;s contact name (or lead name) when sent. Any
-        link you type directly in the message becomes a tappable button automatically — no button field needed.
+        link you type directly in the message becomes a tappable, underlined link automatically — no separate
+        button field needed.
       </p>
       <p className="mb-5 text-sm text-slate-500">
-        <strong>Note:</strong> sending goes through a plain WhatsApp link, not the paid WhatsApp Business API —
-        so a real file attachment isn&apos;t possible. If you add an Image URL below, WhatsApp will show a
-        preview thumbnail of it under the message instead.
+        <strong>Note:</strong> sending goes through a plain WhatsApp link, not the paid, Meta-approved WhatsApp
+        Business API — so real tappable Quick Reply buttons and file attachments aren&apos;t possible. Add an
+        image below and it&apos;ll be attached to your account&apos;s server and appear as a link preview
+        thumbnail under the message instead.
       </p>
 
       {error && (
@@ -86,15 +109,36 @@ export default function TemplatesClient() {
           rows={3}
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
         />
-        <input
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          placeholder="Image URL (optional) — shows as a preview thumbnail"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        />
+        <div>
+          <label className="mb-1 block text-xs font-medium text-slate-500">
+            Image (optional) — shows as a preview thumbnail
+          </label>
+          {imageUrl ? (
+            <div className="flex items-center gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageUrl} alt="" className="h-12 w-12 rounded-lg object-cover ring-1 ring-slate-200" />
+              <button
+                type="button"
+                onClick={() => setImageUrl("")}
+                className="text-xs text-rose-600 hover:underline"
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handleImageSelect}
+              disabled={uploading}
+              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+            />
+          )}
+          {uploading && <p className="mt-1 text-xs text-slate-500">Uploading…</p>}
+        </div>
         <button
           type="submit"
-          disabled={loading || !name.trim() || !body.trim()}
+          disabled={loading || uploading || !name.trim() || !body.trim()}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
         >
           {loading ? "Saving…" : "Save template"}

@@ -8,6 +8,7 @@ Caddyfile
 *.db
 *.db-journal
 dev.db
+/uploads
 .DS_Store
 npm-debug.log*
 next-env.d.ts
