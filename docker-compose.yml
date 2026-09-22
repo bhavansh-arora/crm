@@ -9,7 +9,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: crm
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      # Postgres 18's image expects the volume at the parent directory (not
+      # .../data directly) -- it manages a versioned subdirectory itself.
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U crm"]
       interval: 5s
