@@ -36,6 +36,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
   const status = searchParams.get("status") || "";
   const temperature = searchParams.get("temperature") || "";
   const assignedToId = searchParams.get("assignedToId") || "";
+  const source = searchParams.get("source") || "";
   const search = searchParams.get("search") || "";
   const filter = searchParams.get("filter") || "";
   const sort = searchParams.get("sort") || "updated_desc";
@@ -60,9 +61,15 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
     isAdmin ? "/api/users" : null,
     fetcher
   );
+  // Unfiltered, so the source dropdown's own option list doesn't shrink to
+  // just the currently-selected source once that filter is applied.
+  const { data: allLeadsData } = useSWR<{ leads: LeadListItem[] }>("/api/leads", fetcher);
 
   const leads = data?.leads || [];
   const reps = (teamData?.users || []).filter((u) => u.role === "SALES_REP" && u.active);
+  const sources = Array.from(
+    new Set((allLeadsData?.leads || []).map((l) => l.source).filter((s): s is string => !!s))
+  ).sort();
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -153,6 +160,18 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
           {LEAD_TEMPERATURES.map((t) => (
             <option key={t} value={t}>
               {LEAD_TEMPERATURE_LABELS[t]}
+            </option>
+          ))}
+        </select>
+        <select
+          value={source}
+          onChange={(e) => updateParam("source", e.target.value)}
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+        >
+          <option value="">All lead sources</option>
+          {sources.map((s) => (
+            <option key={s} value={s}>
+              {s}
             </option>
           ))}
         </select>

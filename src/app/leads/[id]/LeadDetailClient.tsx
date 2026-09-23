@@ -793,26 +793,26 @@ export function CompanyWebsiteEditor({
   }
 
   return (
-    <div className="mt-1 flex flex-col gap-1.5 sm:flex-row sm:items-center">
+    <div className="mt-1 flex flex-wrap items-center gap-1.5">
       <input
         value={contactNameInput}
         onChange={(e) => setContactNameInput(e.target.value)}
         placeholder="Contact name"
-        className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+        className="min-w-0 flex-1 basis-28 rounded-lg border border-slate-300 px-2 py-1 text-sm"
       />
       <input
         value={companyInput}
         onChange={(e) => setCompanyInput(e.target.value)}
         placeholder="Company name"
-        className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+        className="min-w-0 flex-1 basis-28 rounded-lg border border-slate-300 px-2 py-1 text-sm"
       />
       <input
         value={websiteInput}
         onChange={(e) => setWebsiteInput(e.target.value)}
         placeholder="Website (e.g. example.com)"
-        className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
+        className="min-w-0 flex-1 basis-36 rounded-lg border border-slate-300 px-2 py-1 text-sm"
       />
-      <div className="flex gap-1">
+      <div className="flex shrink-0 gap-1">
         <button
           onClick={save}
           disabled={saving || busy}

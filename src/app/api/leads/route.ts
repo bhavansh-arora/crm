@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status");
     const temperature = searchParams.get("temperature");
     const assignedToId = searchParams.get("assignedToId");
+    const source = searchParams.get("source");
     const search = searchParams.get("search");
     const filter = searchParams.get("filter"); // "due_today" | "overdue" | "stale"
     const sort = searchParams.get("sort") || "updated_desc";
@@ -43,6 +44,7 @@ export async function GET(req: NextRequest) {
 
     if (status) where.status = status;
     if (temperature) where.temperature = temperature;
+    if (source) where.source = source;
     if (search) {
       where.OR = [
         { name: { contains: search } },
