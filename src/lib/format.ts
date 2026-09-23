@@ -48,3 +48,24 @@ export function durationSince(date: Date | string): string {
   if (days === 1) return "1 day";
   return `${days} days`;
 }
+
+export function formatTime(date: Date | string): string {
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(date));
+}
+
+export function formatMinutes(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins}m`;
+  if (mins === 0) return `${hours}h`;
+  return `${hours}h ${mins}m`;
+}
+
+// Displays a "YYYY-MM-DD" key (already bucketed by IST on the server) as a
+// readable date without re-running it through the viewer's own timezone.
+export function formatDayKey(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(
+    new Date(year, month - 1, day)
+  );
+}

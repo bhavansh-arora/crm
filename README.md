@@ -47,7 +47,12 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   heartbeat ping), when each rep was last active, and how many status
   changes/notes/calls they've logged — with an automatic warning if leads
   are being updated at a suspiciously fast pace (e.g. several status
-  changes within the same minute).
+  changes within the same minute). A **Time Tracking** tab on the same page
+  breaks this down per day per rep — total time the app was open, split
+  into sessions with start/end timestamps (e.g. "9:02 AM – 11:47 AM"). This
+  measures time the CRM was open and in the foreground, not time on the
+  phone or doing other work away from the screen, so it's a useful estimate
+  rather than an exact timesheet.
 - **Payment links (optional, needs Razorpay keys)**: generate a Razorpay
   payment link from any lead, share it, and see whether it's been paid —
   updated automatically via webhook, or on demand with "Check status".

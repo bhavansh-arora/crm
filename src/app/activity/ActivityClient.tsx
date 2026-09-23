@@ -4,6 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/fetcher";
 import { relativeTime } from "@/lib/format";
+import TimeTrackingClient from "./TimeTrackingClient";
 
 type RepReport = {
   id: string;
@@ -36,7 +37,13 @@ const RANGES = [
 // couldn't plausibly have done real work on that many leads that quickly.
 const BURST_THRESHOLDS = { in1Min: 5, in5Min: 10, in10Min: 15 };
 
+const TABS = [
+  { value: "overview", label: "Overview" },
+  { value: "time", label: "Time Tracking" },
+] as const;
+
 export default function ActivityClient() {
+  const [tab, setTab] = useState<string>("overview");
   const [range, setRange] = useState<string>("today");
   const { data, isLoading } = useSWR<ActivityReport>(`/api/admin/activity?range=${range}`, fetcher);
 
@@ -46,37 +53,59 @@ export default function ActivityClient() {
     <div className="mx-auto max-w-3xl">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-slate-900">Team Activity</h1>
-        <div className="flex gap-2">
-          {RANGES.map((r) => (
-            <button
-              key={r.value}
-              onClick={() => setRange(r.value)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
-                range === r.value
-                  ? "bg-brand-600 text-white ring-brand-600"
-                  : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
-              }`}
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
+        {tab === "overview" && (
+          <div className="flex gap-2">
+            {RANGES.map((r) => (
+              <button
+                key={r.value}
+                onClick={() => setRange(r.value)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium ring-1 ${
+                  range === r.value
+                    ? "bg-brand-600 text-white ring-brand-600"
+                    : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      <p className="mb-5 text-sm text-slate-500">
-        How much each rep is doing, and whether lead statuses are being updated at a suspiciously
-        fast pace (real work on a lead rarely takes less than a minute).
-      </p>
+      <div className="mb-5 flex gap-2 border-b border-slate-200">
+        {TABS.map((t) => (
+          <button
+            key={t.value}
+            onClick={() => setTab(t.value)}
+            className={`border-b-2 px-1 pb-2 text-sm font-medium ${
+              tab === t.value
+                ? "border-brand-600 text-brand-700"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-      {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
-      {!isLoading && reps.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
-          No sales reps yet.
-        </div>
-      )}
+      {tab === "time" ? (
+        <TimeTrackingClient />
+      ) : (
+        <>
+          <p className="mb-5 text-sm text-slate-500">
+            How much each rep is doing, and whether lead statuses are being updated at a
+            suspiciously fast pace (real work on a lead rarely takes less than a minute).
+          </p>
 
-      <div className="space-y-3">
-        {reps.map((rep) => {
+          {isLoading && <p className="text-sm text-slate-500">Loading…</p>}
+          {!isLoading && reps.length === 0 && (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">
+              No sales reps yet.
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {reps.map((rep) => {
           const burst =
             rep.maxStatusChangesIn1Min >= BURST_THRESHOLDS.in1Min ||
             rep.maxStatusChangesIn5Min >= BURST_THRESHOLDS.in5Min ||
@@ -123,6 +152,8 @@ export default function ActivityClient() {
           );
         })}
       </div>
+        </>
+      )}
     </div>
   );
 }

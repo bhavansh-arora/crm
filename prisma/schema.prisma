@@ -27,6 +27,19 @@ model User {
   followUps         FollowUp[]
   paymentLinks      PaymentLink[]
   whatsAppTemplates WhatsAppTemplate[]
+  heartbeatLogs     HeartbeatLog[]
+}
+
+// One row per heartbeat ping (throttled to roughly one per minute of active
+// use in the API route) -- lets the admin see actual time-in-app per day,
+// not just the single most-recent lastActiveAt timestamp.
+model HeartbeatLog {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model WhatsAppTemplate {
