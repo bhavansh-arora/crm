@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { fetcher, apiRequest } from "@/lib/fetcher";
-import { formatCurrency, formatDateTime, durationSince, relativeTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, durationSince, relativeTime, formatWebsiteDisplay } from "@/lib/format";
 import { fillTemplate, buildWhatsAppMessage, buildWhatsAppUrl, buildTelHref } from "@/lib/phone";
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
@@ -784,7 +784,7 @@ export function CompanyWebsiteEditor({
         {website && (
           <>
             {(contactName || company) && " · "}
-            <span className="text-brand-600">{website}</span>
+            <span className="text-brand-600">{formatWebsiteDisplay(website)}</span>
           </>
         )}
         {!hasAny && "No company (add contact/company/website)"}

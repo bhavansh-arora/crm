@@ -61,6 +61,12 @@ export function formatMinutes(minutes: number): string {
   return `${hours}h ${mins}m`;
 }
 
+// Shows just the domain from a lead's website field, e.g. "https://www.google.com/abc?x=1" -> "www.google.com/"
+export function formatWebsiteDisplay(website: string): string {
+  const host = website.trim().replace(/^https?:\/\//i, "").split("/")[0];
+  return `${host}/`;
+}
+
 // Displays a "YYYY-MM-DD" key (already bucketed by IST on the server) as a
 // readable date without re-running it through the viewer's own timezone.
 export function formatDayKey(dateKey: string): string {
