@@ -59,8 +59,11 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
 - **External lead ingestion (optional)**: `POST /api/external/leads`, gated
   by an `EXTERNAL_LEADS_SECRET` bearer token, lets another internal tool
   push leads straight in — used by the companion Leads Finder tool's
-  "Push to CRM" button. Dedupes by phone number and auto-creates the
-  named source if it doesn't already exist as a Lead Source.
+  "Push to CRM" button. Dedupes by phone number (a lead already in the
+  system under that phone is skipped, not duplicated) and auto-creates the
+  named source if it doesn't already exist as a Lead Source. A matching
+  `GET /api/external/sources` lists current source names, so the pushing
+  tool can offer a picker instead of a fixed, hardcoded source.
 - **One-touch calling**: a Call button on every lead dials out via the
   device's phone app (`tel:` link — works great on mobile, needs a
   softphone on desktop). A dedicated Dialer page turns this into a queue:
