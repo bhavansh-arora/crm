@@ -28,3 +28,11 @@ export function buildWhatsAppUrl(phone: string, message: string): string {
   const number = toWhatsAppNumber(phone);
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
+
+// A bare "91"-prefixed number with no "+" isn't a valid dial pattern on
+// Indian networks (only a plain 10-digit number or a "+91"-prefixed one
+// dials correctly), so the tel: link needs the "+" that toWhatsAppNumber
+// deliberately omits (wa.me wants digits only).
+export function buildTelHref(phone: string): string {
+  return `tel:+${toWhatsAppNumber(phone)}`;
+}

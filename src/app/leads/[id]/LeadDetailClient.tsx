@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatCurrency, formatDateTime, durationSince, relativeTime } from "@/lib/format";
-import { fillTemplate, buildWhatsAppMessage, buildWhatsAppUrl } from "@/lib/phone";
+import { fillTemplate, buildWhatsAppMessage, buildWhatsAppUrl, buildTelHref } from "@/lib/phone";
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import {
@@ -683,7 +683,7 @@ export function CallWhatsAppButtons({
   return (
     <div className="relative flex items-center gap-2">
       <a
-        href={`tel:${phone}`}
+        href={buildTelHref(phone)}
         className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
       >
         📞 Call {phone}
