@@ -56,6 +56,11 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
 - **Payment links (optional, needs Razorpay keys)**: generate a Razorpay
   payment link from any lead, share it, and see whether it's been paid —
   updated automatically via webhook, or on demand with "Check status".
+- **External lead ingestion (optional)**: `POST /api/external/leads`, gated
+  by an `EXTERNAL_LEADS_SECRET` bearer token, lets another internal tool
+  push leads straight in — used by the companion Leads Finder tool's
+  "Push to CRM" button. Dedupes by phone number and auto-creates the
+  named source if it doesn't already exist as a Lead Source.
 - **One-touch calling**: a Call button on every lead dials out via the
   device's phone app (`tel:` link — works great on mobile, needs a
   softphone on desktop). A dedicated Dialer page turns this into a queue:
