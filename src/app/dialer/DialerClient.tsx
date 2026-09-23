@@ -41,7 +41,12 @@ export default function DialerClient() {
   const [error, setError] = useState<string | null>(null);
 
   const openLeads = (data?.leads || []).filter((l) => (OPEN_STATUSES as string[]).includes(l.status));
-  const sources = Array.from(new Set(openLeads.map((l) => l.source).filter((s): s is string => !!s))).sort();
+  const sourceCounts = new Map<string, number>();
+  for (const l of openLeads) {
+    if (!l.source) continue;
+    sourceCounts.set(l.source, (sourceCounts.get(l.source) || 0) + 1);
+  }
+  const sources = Array.from(sourceCounts.keys()).sort();
   const queue = source ? openLeads.filter((l) => l.source === source) : openLeads;
   const current = queue[index];
 
@@ -135,7 +140,7 @@ export default function DialerClient() {
           <option value="">All lead sources</option>
           {sources.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {s} ({sourceCounts.get(s)})
             </option>
           ))}
         </select>

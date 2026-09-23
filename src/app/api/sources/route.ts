@@ -10,8 +10,16 @@ const createSourceSchema = z.object({
 export async function GET() {
   try {
     await requireAdmin();
-    const sources = await prisma.leadSource.findMany({ orderBy: { name: "asc" } });
-    return NextResponse.json({ sources });
+    // Lead.source is a plain string, not a foreign key to LeadSource (leads
+    // can carry a source name after it's been renamed/retired), so counts
+    // are joined by name via a separate groupBy rather than a Prisma relation.
+    const [sources, counts] = await Promise.all([
+      prisma.leadSource.findMany({ orderBy: { name: "asc" } }),
+      prisma.lead.groupBy({ by: ["source"], _count: { _all: true } }),
+    ]);
+    const countBySource = new Map(counts.map((c) => [c.source, c._count._all]));
+    const withCounts = sources.map((s) => ({ ...s, leadCount: countBySource.get(s.name) || 0 }));
+    return NextResponse.json({ sources: withCounts });
   } catch (error) {
     return handleApiError(error);
   }

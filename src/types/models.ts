@@ -107,4 +107,5 @@ export type LeadSource = {
   name: string;
   active: boolean;
   createdAt: string;
+  leadCount: number;
 };

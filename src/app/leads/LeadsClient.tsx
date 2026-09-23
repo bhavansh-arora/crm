@@ -67,9 +67,12 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
 
   const leads = data?.leads || [];
   const reps = (teamData?.users || []).filter((u) => u.role === "SALES_REP" && u.active);
-  const sources = Array.from(
-    new Set((allLeadsData?.leads || []).map((l) => l.source).filter((s): s is string => !!s))
-  ).sort();
+  const sourceCounts = new Map<string, number>();
+  for (const l of allLeadsData?.leads || []) {
+    if (!l.source) continue;
+    sourceCounts.set(l.source, (sourceCounts.get(l.source) || 0) + 1);
+  }
+  const sources = Array.from(sourceCounts.keys()).sort();
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -171,7 +174,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
           <option value="">All lead sources</option>
           {sources.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {s} ({sourceCounts.get(s)})
             </option>
           ))}
         </select>

@@ -82,6 +82,9 @@ export default function SourcesClient() {
           >
             <span className={`font-medium ${s.active ? "text-slate-900" : "text-slate-400 line-through"}`}>
               {s.name}
+              <span className="ml-1.5 font-normal text-slate-400">
+                ({s.leadCount} lead{s.leadCount === 1 ? "" : "s"})
+              </span>
             </span>
             <button
               onClick={() => toggleActive(s)}
