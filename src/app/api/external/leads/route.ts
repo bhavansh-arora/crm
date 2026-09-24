@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { normalizePhone, loadPhoneLookup } from "@/lib/duplicate-lead";
 
 // Server-to-server ingestion endpoint for other internal tools (e.g. the
 // Leads Finder app) to push leads in -- not a browser-facing route, so it's
@@ -45,17 +46,24 @@ export async function POST(req: NextRequest) {
   const results: { phone: string; status: "created" | "duplicate" }[] = [];
   let created = 0;
 
-  // Sequential, not Promise.all -- keeps the duplicate check (findFirst then
-  // create) race-free against two leads in the same batch sharing a phone.
+  // Normalized (digits only, country code applied), not an exact string
+  // match -- a lead already in the CRM as "9876543210" and an incoming
+  // "+91 98765 43210" for the same person are the same number even though
+  // the strings differ. Loaded once for the whole batch rather than
+  // per-lead: sequential processing (not Promise.all) still keeps this
+  // race-free against two leads in the same batch sharing a phone, since
+  // each create()'s result is added to the lookup before the next check.
+  const phoneLookup = await loadPhoneLookup();
+
   for (const lead of data.leads) {
     const phone = lead.phone.trim();
-    const existing = await prisma.lead.findFirst({ where: { phone } });
-    if (existing) {
+    const normalized = normalizePhone(phone);
+    if (normalized && phoneLookup.has(normalized)) {
       results.push({ phone, status: "duplicate" });
       continue;
     }
 
-    await prisma.lead.create({
+    const newLead = await prisma.lead.create({
       data: {
         name: lead.name,
         company: lead.name,
@@ -67,6 +75,7 @@ export async function POST(req: NextRequest) {
         value: 0,
       },
     });
+    if (normalized) phoneLookup.set(normalized, { id: newLead.id, name: newLead.name });
     results.push({ phone, status: "created" });
     created += 1;
   }

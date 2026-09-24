@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAdmin, handleApiError } from "@/lib/api-auth";
 import { LEAD_STATUSES, LEAD_TEMPERATURES, OPEN_STATUSES } from "@/lib/constants";
-import { toWhatsAppNumber } from "@/lib/phone";
+import { normalizePhone, loadPhoneLookup } from "@/lib/duplicate-lead";
 
 const createLeadSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -108,23 +108,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const data = createLeadSchema.parse(body);
 
-    if (data.phone) {
-      // Compare normalized (digits only, country code applied) rather than
-      // exact strings, so "9876543210", "+91 98765 43210", and
-      // "098765-43210" are recognized as the same number.
-      const normalizedNew = toWhatsAppNumber(data.phone);
-      if (normalizedNew) {
-        const candidates = await prisma.lead.findMany({
-          where: { phone: { not: null } },
-          select: { id: true, name: true, phone: true },
-        });
-        const dupe = candidates.find((l) => l.phone && toWhatsAppNumber(l.phone) === normalizedNew);
-        if (dupe) {
-          return NextResponse.json(
-            { error: `A lead with this phone number already exists: "${dupe.name}"` },
-            { status: 409 }
-          );
-        }
+    const normalizedNew = normalizePhone(data.phone);
+    if (normalizedNew) {
+      const lookup = await loadPhoneLookup();
+      const dupe = lookup.get(normalizedNew);
+      if (dupe) {
+        return NextResponse.json(
+          { error: `A lead with this phone number already exists: "${dupe.name}"` },
+          { status: 409 }
+        );
       }
     }
 
