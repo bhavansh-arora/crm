@@ -67,6 +67,14 @@ export function formatWebsiteDisplay(website: string): string {
   return `${host}/`;
 }
 
+// A lead's website is often stored without a protocol (e.g. "example.com"),
+// which a bare href would treat as a relative link instead of an external
+// one -- this makes sure it always opens the actual site.
+export function websiteHref(website: string): string {
+  const trimmed = website.trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
 // Displays a "YYYY-MM-DD" key (already bucketed by IST on the server) as a
 // readable date without re-running it through the viewer's own timezone.
 export function formatDayKey(dateKey: string): string {

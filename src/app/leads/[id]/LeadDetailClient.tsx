@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { fetcher, apiRequest } from "@/lib/fetcher";
-import { formatCurrency, formatDateTime, durationSince, relativeTime, formatWebsiteDisplay } from "@/lib/format";
+import { formatCurrency, formatDateTime, durationSince, relativeTime, formatWebsiteDisplay, websiteHref } from "@/lib/format";
 import { fillTemplate, buildWhatsAppMessage, buildWhatsAppUrl, buildTelHref } from "@/lib/phone";
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
@@ -767,28 +767,39 @@ export function CompanyWebsiteEditor({
   }
 
   if (!editing) {
+    const hasContactOrCompany = contactName || company;
     const hasAny = contactName || company || website;
     return (
-      <button
-        onClick={() => {
-          setContactNameInput(contactName || "");
-          setCompanyInput(company || "");
-          setWebsiteInput(website || "");
-          setEditing(true);
-        }}
-        className="mt-0.5 block text-left text-sm text-slate-500 underline decoration-dotted underline-offset-2 hover:text-brand-700"
-      >
-        {contactName && <>👤 {contactName}</>}
-        {contactName && (company || website) && " · "}
-        {company || (!contactName && !website ? "No company" : "")}
+      <div className="mt-0.5 flex flex-wrap items-center gap-1 text-sm text-slate-500">
+        <button
+          onClick={() => {
+            setContactNameInput(contactName || "");
+            setCompanyInput(company || "");
+            setWebsiteInput(website || "");
+            setEditing(true);
+          }}
+          className="text-left underline decoration-dotted underline-offset-2 hover:text-brand-700"
+        >
+          {contactName && <>👤 {contactName}</>}
+          {contactName && company && " · "}
+          {company}
+          {!hasAny && "No company (add contact/company/website)"}
+          {hasAny && !hasContactOrCompany && "Add contact/company"}
+        </button>
         {website && (
           <>
-            {(contactName || company) && " · "}
-            <span className="text-brand-600">{formatWebsiteDisplay(website)}</span>
+            {hasContactOrCompany && <span className="text-slate-400">·</span>}
+            <a
+              href={websiteHref(website)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-brand-600 hover:underline"
+            >
+              {formatWebsiteDisplay(website)}
+            </a>
           </>
         )}
-        {!hasAny && "No company (add contact/company/website)"}
-      </button>
+      </div>
     );
   }
 
