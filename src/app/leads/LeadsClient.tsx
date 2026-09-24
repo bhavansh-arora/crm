@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatCurrency, formatDateTime, relativeTime } from "@/lib/format";
@@ -53,6 +53,20 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
     router.replace(`${pathname}?${next.toString()}`, { scroll: false });
   }
 
+  // Typing straight into updateParam (a URL navigation per keystroke) can't
+  // keep up with fast typing -- the input's value is derived from the URL,
+  // so a keystroke landing before the previous navigation has committed gets
+  // dropped. Local state makes typing always instant; the URL (and the API
+  // call it drives) only updates 300ms after the user pauses.
+  const [searchInput, setSearchInput] = useState(search);
+  useEffect(() => setSearchInput(search), [search]);
+  useEffect(() => {
+    if (searchInput === search) return;
+    const t = setTimeout(() => updateParam("search", searchInput), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput]);
+
   const { data, isLoading, mutate } = useSWR<{ leads: LeadListItem[] }>(
     `/api/leads?${searchParams.toString()}`,
     fetcher
@@ -67,6 +81,10 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
 
   const leads = data?.leads || [];
   const reps = (teamData?.users || []).filter((u) => u.role === "SALES_REP" && u.active);
+  // allLeadsData is unfiltered but still server-scoped to "my leads" for a
+  // rep, so this is exactly their own new/untouched count -- "NEW" is the
+  // status every lead starts at and only leaves once actually worked.
+  const uncontactedCount = (allLeadsData?.leads || []).filter((l) => l.status === "NEW").length;
   const sourceCounts = new Map<string, number>();
   for (const l of allLeadsData?.leads || []) {
     if (!l.source) continue;
@@ -119,6 +137,12 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
         )}
       </div>
 
+      {!isAdmin && uncontactedCount > 0 && (
+        <div className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-100">
+          🆕 {uncontactedCount} new lead{uncontactedCount !== 1 ? "s" : ""} in your kitty not yet contacted
+        </div>
+      )}
+
       <div className="mb-3 flex flex-wrap gap-2">
         {QUICK_FILTERS.map((f) => (
           <button
@@ -137,8 +161,8 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
 
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <input
-          value={search}
-          onChange={(e) => updateParam("search", e.target.value)}
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Search by name, company, phone…"
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm sm:max-w-xs"
         />

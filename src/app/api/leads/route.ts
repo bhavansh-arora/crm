@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession, requireAdmin, handleApiError } from "@/lib/api-auth";
 import { LEAD_STATUSES, LEAD_TEMPERATURES, OPEN_STATUSES } from "@/lib/constants";
+import { toWhatsAppNumber } from "@/lib/phone";
 
 const createLeadSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -47,10 +48,10 @@ export async function GET(req: NextRequest) {
     if (source) where.source = source;
     if (search) {
       where.OR = [
-        { name: { contains: search } },
-        { company: { contains: search } },
-        { email: { contains: search } },
-        { phone: { contains: search } },
+        { name: { contains: search, mode: "insensitive" } },
+        { company: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { phone: { contains: search, mode: "insensitive" } },
       ];
     }
 
@@ -106,6 +107,26 @@ export async function POST(req: NextRequest) {
     await requireAdmin();
     const body = await req.json();
     const data = createLeadSchema.parse(body);
+
+    if (data.phone) {
+      // Compare normalized (digits only, country code applied) rather than
+      // exact strings, so "9876543210", "+91 98765 43210", and
+      // "098765-43210" are recognized as the same number.
+      const normalizedNew = toWhatsAppNumber(data.phone);
+      if (normalizedNew) {
+        const candidates = await prisma.lead.findMany({
+          where: { phone: { not: null } },
+          select: { id: true, name: true, phone: true },
+        });
+        const dupe = candidates.find((l) => l.phone && toWhatsAppNumber(l.phone) === normalizedNew);
+        if (dupe) {
+          return NextResponse.json(
+            { error: `A lead with this phone number already exists: "${dupe.name}"` },
+            { status: 409 }
+          );
+        }
+      }
+    }
 
     const lead = await prisma.lead.create({
       data: {

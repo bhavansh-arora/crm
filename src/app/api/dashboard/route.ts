@@ -37,7 +37,15 @@ export async function GET() {
 
     const repMap = new Map<
       string,
-      { id: string; name: string; totalLeads: number; wonLeads: number; revenue: number; pipelineValue: number }
+      {
+        id: string;
+        name: string;
+        totalLeads: number;
+        wonLeads: number;
+        revenue: number;
+        pipelineValue: number;
+        uncontactedLeads: number;
+      }
     >();
 
     const byTemperature: Record<LeadTemperatureValue, number> = Object.fromEntries(
@@ -82,6 +90,7 @@ export async function GET() {
           wonLeads: 0,
           revenue: 0,
           pipelineValue: 0,
+          uncontactedLeads: 0,
         };
         rep.totalLeads += 1;
         if (lead.status === "WON") {
@@ -90,6 +99,10 @@ export async function GET() {
         } else if (lead.status !== "LOST") {
           rep.pipelineValue += lead.value;
         }
+        // "NEW" is the status every lead starts at and only leaves once a
+        // rep actually works it (the next stage is literally "CONTACTED"),
+        // so it doubles as "sitting in their kitty, untouched."
+        if (lead.status === "NEW") rep.uncontactedLeads += 1;
         repMap.set(lead.assignedTo.id, rep);
       }
     }

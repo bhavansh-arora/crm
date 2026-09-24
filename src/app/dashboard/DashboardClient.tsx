@@ -25,7 +25,15 @@ type DashboardStats = {
   byStatus: Record<LeadStatusValue, { count: number; value: number }>;
   byTemperature: Record<LeadTemperatureValue, number>;
   avgAgeInStageDays: Record<LeadStatusValue, number>;
-  reps: { id: string; name: string; totalLeads: number; wonLeads: number; revenue: number; pipelineValue: number }[];
+  reps: {
+    id: string;
+    name: string;
+    totalLeads: number;
+    wonLeads: number;
+    revenue: number;
+    pipelineValue: number;
+    uncontactedLeads: number;
+  }[];
   overdueFollowUps: number;
   upcomingFollowUps: number;
   dueTodayFollowUps: number;
@@ -134,6 +142,14 @@ export default function DashboardClient() {
                   <span className="text-slate-500">
                     {formatCurrency(rep.revenue)} won · {rep.wonLeads}/{rep.totalLeads} leads (
                     {conversionForRep.toFixed(0)}%) · {formatCurrency(rep.pipelineValue)} in pipeline
+                    {rep.uncontactedLeads > 0 && (
+                      <>
+                        {" · "}
+                        <span className="font-medium text-amber-600">
+                          {rep.uncontactedLeads} new, uncontacted
+                        </span>
+                      </>
+                    )}
                   </span>
                 </div>
                 <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
