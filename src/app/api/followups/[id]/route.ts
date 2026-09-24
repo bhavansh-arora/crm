@@ -5,7 +5,10 @@ import { requireSession, ApiError, handleApiError } from "@/lib/api-auth";
 
 const updateFollowUpSchema = z.object({
   completed: z.boolean().optional(),
-  dueAt: z.coerce.date().optional(),
+  dueAt: z.coerce
+    .date()
+    .refine((d) => d.getTime() >= Date.now() - 60_000, { message: "Follow-up date can't be in the past" })
+    .optional(),
   note: z.string().optional(),
 });
 

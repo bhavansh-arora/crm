@@ -6,7 +6,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { fetcher, apiRequest } from "@/lib/fetcher";
-import { formatCurrency, formatDateTime, durationSince, relativeTime, formatWebsiteDisplay, websiteHref } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDateTime,
+  durationSince,
+  relativeTime,
+  formatWebsiteDisplay,
+  websiteHref,
+  nowForDateTimeLocalInput,
+} from "@/lib/format";
 import { fillTemplate, buildWhatsAppMessage, buildWhatsAppUrl, buildTelHref } from "@/lib/phone";
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
@@ -540,10 +548,15 @@ function FollowUpForm({
   const [dueAt, setDueAt] = useState(defaultDate);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const minDateTime = nowForDateTimeLocalInput();
 
   async function submit() {
-    setLoading(true);
     onError(null);
+    if (dueAt < nowForDateTimeLocalInput()) {
+      onError("Follow-up date can't be in the past");
+      return;
+    }
+    setLoading(true);
     try {
       await apiRequest(`/api/leads/${leadId}/followups`, "POST", { dueAt, note: note || undefined });
       onDone();
@@ -559,7 +572,9 @@ function FollowUpForm({
       <input
         type="datetime-local"
         value={dueAt}
+        min={minDateTime}
         onChange={(e) => setDueAt(e.target.value)}
+        onClick={(e) => e.currentTarget.showPicker?.()}
         className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
       />
       <textarea

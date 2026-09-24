@@ -4,7 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, ApiError, handleApiError } from "@/lib/api-auth";
 
 const createFollowUpSchema = z.object({
-  dueAt: z.coerce.date(),
+  dueAt: z.coerce.date().refine((d) => d.getTime() >= Date.now() - 60_000, {
+    message: "Follow-up date can't be in the past",
+  }),
   note: z.string().optional(),
 });
 

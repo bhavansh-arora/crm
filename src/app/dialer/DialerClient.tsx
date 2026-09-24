@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { fetcher, apiRequest } from "@/lib/fetcher";
-import { formatCurrency, relativeTime } from "@/lib/format";
+import { formatCurrency, relativeTime, nowForDateTimeLocalInput } from "@/lib/format";
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import { CallWhatsAppButtons, CompanyWebsiteEditor } from "@/app/leads/[id]/LeadDetailClient";
@@ -65,6 +65,10 @@ export default function DialerClient() {
 
   async function logAndNext() {
     if (!current) return;
+    if (followUpDate && followUpDate < nowForDateTimeLocalInput()) {
+      setError("Follow-up date can't be in the past");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -272,7 +276,9 @@ export default function DialerClient() {
                   <input
                     type="datetime-local"
                     value={followUpDate}
+                    min={nowForDateTimeLocalInput()}
                     onChange={(e) => setFollowUpDate(e.target.value)}
+                    onClick={(e) => e.currentTarget.showPicker?.()}
                     className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
                   />
                 </div>

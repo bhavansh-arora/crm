@@ -67,6 +67,16 @@ export function formatWebsiteDisplay(website: string): string {
   return `${host}/`;
 }
 
+// "YYYY-MM-DDTHH:mm" in the *viewer's* local time, suitable for a
+// datetime-local input's value or min attribute. toISOString() (used
+// elsewhere for defaults) gives UTC, which datetime-local misreads as local
+// time -- fine for a friendly default, but wrong for a hard min bound.
+export function nowForDateTimeLocalInput(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 // A lead's website is often stored without a protocol (e.g. "example.com"),
 // which a bare href would treat as a relative link instead of an external
 // one -- this makes sure it always opens the actual site.
