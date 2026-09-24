@@ -70,11 +70,14 @@ export function formatWebsiteDisplay(website: string): string {
 // "YYYY-MM-DDTHH:mm" in the *viewer's* local time, suitable for a
 // datetime-local input's value or min attribute. toISOString() (used
 // elsewhere for defaults) gives UTC, which datetime-local misreads as local
-// time -- fine for a friendly default, but wrong for a hard min bound.
-export function nowForDateTimeLocalInput(): string {
-  const d = new Date();
+// time -- fine-looking but wrong the moment the viewer isn't in UTC.
+export function toDateTimeLocalInput(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function nowForDateTimeLocalInput(): string {
+  return toDateTimeLocalInput(new Date());
 }
 
 // A lead's website is often stored without a protocol (e.g. "example.com"),

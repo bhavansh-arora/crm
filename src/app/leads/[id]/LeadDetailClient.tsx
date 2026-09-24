@@ -14,6 +14,7 @@ import {
   formatWebsiteDisplay,
   websiteHref,
   nowForDateTimeLocalInput,
+  toDateTimeLocalInput,
 } from "@/lib/format";
 import { fillTemplate, buildWhatsAppMessage, buildWhatsAppUrl, buildTelHref } from "@/lib/phone";
 import StatusBadge from "@/components/StatusBadge";
@@ -544,7 +545,7 @@ function FollowUpForm({
   onDone: () => void;
   onError: (msg: string | null) => void;
 }) {
-  const defaultDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+  const defaultDate = toDateTimeLocalInput(new Date(Date.now() + 24 * 60 * 60 * 1000));
   const [dueAt, setDueAt] = useState(defaultDate);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
@@ -558,7 +559,18 @@ function FollowUpForm({
     }
     setLoading(true);
     try {
-      await apiRequest(`/api/leads/${leadId}/followups`, "POST", { dueAt, note: note || undefined });
+      // dueAt is a timezone-less "wall clock" string from the datetime-local
+      // input (e.g. "2026-09-25T15:00") -- new Date(...) here in the browser
+      // correctly reads it as the viewer's local time, and toISOString()
+      // converts it to an absolute UTC instant before it leaves the client.
+      // Sending the raw string instead let the server (which may run in a
+      // different timezone, e.g. UTC) reinterpret the same digits as its
+      // own local time, silently shifting the follow-up by the offset
+      // between the rep's timezone and the server's.
+      await apiRequest(`/api/leads/${leadId}/followups`, "POST", {
+        dueAt: new Date(dueAt).toISOString(),
+        note: note || undefined,
+      });
       onDone();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to schedule follow-up");
