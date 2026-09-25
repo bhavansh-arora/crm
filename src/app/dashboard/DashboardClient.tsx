@@ -38,6 +38,7 @@ type DashboardStats = {
   upcomingFollowUps: number;
   dueTodayFollowUps: number;
   newLeadsToday: number;
+  unassignedUncontactedLeads: number;
 };
 
 export default function DashboardClient() {
@@ -59,6 +60,19 @@ export default function DashboardClient() {
         <StatCard label="Avg Deal Size" value={formatCurrency(data.avgDealSize)} accent="amber" />
         <StatCard label="Avg Time to Close" value={`${data.avgTimeToCloseDays.toFixed(1)}d`} accent="purple" />
       </div>
+
+      {data.unassignedUncontactedLeads > 0 && (
+        <Link
+          href="/leads?assignedToId=unassigned&status=NEW"
+          className="flex items-center justify-between rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-100 hover:ring-amber-300"
+        >
+          <span className="font-medium">🆕 New, uncontacted, and unassigned</span>
+          <span>
+            {data.unassignedUncontactedLeads} lead{data.unassignedUncontactedLeads !== 1 ? "s" : ""} waiting
+            to be assigned to a rep →
+          </span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {(data.overdueFollowUps > 0 || data.upcomingFollowUps > 0) && (

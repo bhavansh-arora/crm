@@ -56,6 +56,11 @@ export async function GET() {
     let pipelineValue = 0;
     let warmPipelineValue = 0;
     const closeDurations: number[] = [];
+    // Leads with no assignee at all never enter repMap below (nothing to key
+    // them by), so a bulk import that lands unassigned -- e.g. the Leads
+    // Finder push -- would otherwise be invisible in the uncontacted count
+    // until someone manually assigns each one.
+    let unassignedUncontactedLeads = 0;
 
     for (const lead of leads) {
       const status = lead.status as LeadStatusValue;
@@ -104,6 +109,8 @@ export async function GET() {
         // so it doubles as "sitting in their kitty, untouched."
         if (lead.status === "NEW") rep.uncontactedLeads += 1;
         repMap.set(lead.assignedTo.id, rep);
+      } else if (lead.status === "NEW") {
+        unassignedUncontactedLeads += 1;
       }
     }
 
@@ -152,6 +159,7 @@ export async function GET() {
       byTemperature,
       avgAgeInStageDays,
       reps: Array.from(repMap.values()).sort((a, b) => b.revenue - a.revenue),
+      unassignedUncontactedLeads,
       overdueFollowUps,
       upcomingFollowUps,
       dueTodayFollowUps,
