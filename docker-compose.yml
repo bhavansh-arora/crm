@@ -36,6 +36,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # Lets this container reach other apps' host-only ports (e.g. another
+    # project's "127.0.0.1:PORT:80" binding) via host.docker.internal --
+    # its own 127.0.0.1 is just this container, not the host machine.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy-data:/data
