@@ -24,6 +24,7 @@ const ADMIN_SECONDARY_ITEMS: NavItem[] = [
 ];
 
 const REP_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/leads", label: "My Leads", icon: "🗂️" },
   { href: "/dialer", label: "Dialer", icon: "📞" },
   { href: "/followups", label: "Follow-ups", icon: "⏰" },

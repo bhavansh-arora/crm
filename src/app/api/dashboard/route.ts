@@ -1,13 +1,20 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin, handleApiError } from "@/lib/api-auth";
+import { requireSession, handleApiError } from "@/lib/api-auth";
 import { LEAD_STATUSES, LEAD_TEMPERATURES, type LeadStatusValue, type LeadTemperatureValue } from "@/lib/constants";
 
+// Admins get the whole team's numbers; sales reps get this same shape scoped
+// to just their own leads, for a personal dashboard -- so "reps" comes back
+// empty and unassignedUncontactedLeads stays 0 for a rep (everything in
+// their own scope is, by definition, assigned to them).
 export async function GET() {
   try {
-    await requireAdmin();
+    const session = await requireSession();
+    const isAdmin = session.user.role === "ADMIN";
+    const leadWhere = isAdmin ? {} : { assignedToId: session.user.id };
 
     const leads = await prisma.lead.findMany({
+      where: leadWhere,
       select: {
         id: true,
         value: true,
@@ -133,17 +140,18 @@ export async function GET() {
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
+    const followUpLeadFilter = isAdmin ? {} : { lead: { assignedToId: session.user.id } };
     const upcomingFollowUps = await prisma.followUp.count({
-      where: { completed: false, dueAt: { gte: new Date() } },
+      where: { completed: false, dueAt: { gte: new Date() }, ...followUpLeadFilter },
     });
     const overdueFollowUps = await prisma.followUp.count({
-      where: { completed: false, dueAt: { lt: new Date() } },
+      where: { completed: false, dueAt: { lt: new Date() }, ...followUpLeadFilter },
     });
     const dueTodayFollowUps = await prisma.followUp.count({
-      where: { completed: false, dueAt: { gte: startOfDay, lte: endOfDay } },
+      where: { completed: false, dueAt: { gte: startOfDay, lte: endOfDay }, ...followUpLeadFilter },
     });
     const newLeadsToday = await prisma.lead.count({
-      where: { createdAt: { gte: startOfDay, lte: endOfDay } },
+      where: { createdAt: { gte: startOfDay, lte: endOfDay }, ...leadWhere },
     });
 
     return NextResponse.json({

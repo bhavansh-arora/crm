@@ -126,7 +126,14 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div>
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-semibold text-slate-900">{isAdmin ? "All Leads" : "My Leads"}</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {isAdmin ? "All Leads" : "My Leads"}{" "}
+          {!isLoading && (
+            <span className="ml-2 text-base font-normal text-slate-400">
+              ({leads.length} lead{leads.length !== 1 ? "s" : ""})
+            </span>
+          )}
+        </h1>
         {isAdmin && (
           <Link
             href="/leads/new"

@@ -6,11 +6,11 @@ import DashboardClient from "./DashboardClient";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
-  if (session?.user.role !== "ADMIN") redirect("/leads");
+  if (!session) redirect("/login");
 
   return (
     <AppShell>
-      <DashboardClient />
+      <DashboardClient isAdmin={session.user.role === "ADMIN"} />
     </AppShell>
   );
 }

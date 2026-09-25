@@ -41,35 +41,39 @@ type DashboardStats = {
   unassignedUncontactedLeads: number;
 };
 
-export default function DashboardClient() {
+export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
   const { data, isLoading } = useSWR<DashboardStats>("/api/dashboard", fetcher);
 
   if (isLoading || !data) return <p className="text-sm text-slate-500">Loading dashboard…</p>;
 
   const maxStatusCount = Math.max(1, ...LEAD_STATUSES.map((s) => data.byStatus[s].count));
+  const uncontactedCount = isAdmin ? data.unassignedUncontactedLeads : data.byStatus.NEW.count;
+  const prefix = isAdmin ? "" : "My ";
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-slate-900">Dashboard</h1>
+      <h1 className="text-2xl font-semibold text-slate-900">{isAdmin ? "Dashboard" : "My Dashboard"}</h1>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard label="Revenue Won" value={formatCurrency(data.totalRevenue)} accent="emerald" />
-        <StatCard label="Pipeline Value" value={formatCurrency(data.pipelineValue)} accent="blue" />
-        <StatCard label="Warm Pipeline" value={formatCurrency(data.warmPipelineValue)} accent="orange" />
+        <StatCard label={`${prefix}Revenue Won`} value={formatCurrency(data.totalRevenue)} accent="emerald" />
+        <StatCard label={`${prefix}Pipeline Value`} value={formatCurrency(data.pipelineValue)} accent="blue" />
+        <StatCard label={`${prefix}Warm Pipeline`} value={formatCurrency(data.warmPipelineValue)} accent="orange" />
         <StatCard label="Conversion Rate" value={`${data.conversionRate.toFixed(1)}%`} accent="indigo" />
         <StatCard label="Avg Deal Size" value={formatCurrency(data.avgDealSize)} accent="amber" />
         <StatCard label="Avg Time to Close" value={`${data.avgTimeToCloseDays.toFixed(1)}d`} accent="purple" />
       </div>
 
-      {data.unassignedUncontactedLeads > 0 && (
+      {uncontactedCount > 0 && (
         <Link
-          href="/leads?assignedToId=unassigned&status=NEW"
+          href={isAdmin ? "/leads?assignedToId=unassigned&status=NEW" : "/leads?status=NEW"}
           className="flex items-center justify-between rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-100 hover:ring-amber-300"
         >
-          <span className="font-medium">🆕 New, uncontacted, and unassigned</span>
+          <span className="font-medium">
+            🆕 {isAdmin ? "New, uncontacted, and unassigned" : "New leads in your kitty"}
+          </span>
           <span>
-            {data.unassignedUncontactedLeads} lead{data.unassignedUncontactedLeads !== 1 ? "s" : ""} waiting
-            to be assigned to a rep →
+            {uncontactedCount} lead{uncontactedCount !== 1 ? "s" : ""}{" "}
+            {isAdmin ? "waiting to be assigned to a rep" : "not yet contacted"} →
           </span>
         </Link>
       )}
@@ -90,10 +94,10 @@ export default function DashboardClient() {
         )}
 
         <Link
-          href="/activity"
+          href={isAdmin ? "/activity" : "/leads"}
           className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 hover:ring-brand-300"
         >
-          <span className="text-sm font-medium text-slate-700">📈 Team activity</span>
+          <span className="text-sm font-medium text-slate-700">{isAdmin ? "📈 Team activity" : "🗂️ My leads"}</span>
           <span className="text-sm text-slate-500">
             {data.newLeadsToday} new lead{data.newLeadsToday !== 1 ? "s" : ""} today
           </span>
@@ -142,6 +146,7 @@ export default function DashboardClient() {
       </div>
 
       {/* Revenue by rep */}
+      {isAdmin && (
       <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <h2 className="mb-4 font-semibold text-slate-900">Revenue by Sales Rep</h2>
         {data.reps.length === 0 && <p className="text-sm text-slate-400">No leads assigned yet.</p>}
@@ -177,6 +182,7 @@ export default function DashboardClient() {
           })}
         </div>
       </div>
+      )}
     </div>
   );
 }
