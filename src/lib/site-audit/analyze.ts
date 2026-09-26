@@ -17,7 +17,7 @@ function parseAttrs(raw: string): Record<string, string> {
   return attrs;
 }
 
-function findTags(html: string, name: string): Tag[] {
+export function findTags(html: string, name: string): Tag[] {
   const re = new RegExp(`<${name}(\\s[^>]*)?>`, "gi");
   const tags: Tag[] = [];
   let m: RegExpExecArray | null;
@@ -27,7 +27,7 @@ function findTags(html: string, name: string): Tag[] {
   return tags;
 }
 
-function innerTexts(html: string, name: string): string[] {
+export function innerTexts(html: string, name: string): string[] {
   const re = new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`, "gi");
   const out: string[] = [];
   let m: RegExpExecArray | null;
@@ -35,7 +35,7 @@ function innerTexts(html: string, name: string): string[] {
   return out;
 }
 
-function stripTags(s: string): string {
+export function stripTags(s: string): string {
   return decodeEntities(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 }
 
@@ -47,7 +47,8 @@ function decodeEntities(s: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)));
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)));
 }
 
 function metaContent(metas: Tag[], key: string): string | null {
@@ -132,6 +133,7 @@ export type HtmlAnalysis = {
   categories: AuditCategory[];
   // Short text excerpt of the page, handed to the AI for context.
   textExcerpt: string;
+  html: string;
 };
 
 export async function analyzeSite(inputUrl: string): Promise<HtmlAnalysis> {
@@ -492,5 +494,6 @@ export async function analyzeSite(inputUrl: string): Promise<HtmlAnalysis> {
     pageTitle: title,
     categories: list.categories(),
     textExcerpt: bodyText.slice(0, 3000),
+    html,
   };
 }

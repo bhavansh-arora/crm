@@ -37,9 +37,17 @@ export const VOICES: VoicePreset[] = [
   },
 ];
 
-export type VoiceSettings = { voice: VoiceId; accent: number; speed: number };
+// authority: 0 = natural pitch, 1 = deepest. The voice is synthesised a
+// little faster and played back slower, which lowers the pitch without
+// changing the pace — a deeper, more commanding delivery.
+export type VoiceSettings = { voice: VoiceId; accent: number; speed: number; authority: number };
 
-export const DEFAULT_VOICE_SETTINGS: VoiceSettings = { voice: "aarohi", accent: 0.85, speed: 0.95 };
+export const DEFAULT_VOICE_SETTINGS: VoiceSettings = { voice: "aarohi", accent: 0.85, speed: 0.92, authority: 0.6 };
+
+// Playback-rate factor for a given authority (1 = unchanged, 0.88 = ~2 semitones lower).
+export function depthFactor(settings: VoiceSettings): number {
+  return 1 - 0.12 * Math.min(1, Math.max(0, settings.authority ?? 0));
+}
 
 export function voiceMix(settings: VoiceSettings): [string, number][] {
   const preset = VOICES.find((v) => v.id === settings.voice) ?? VOICES[0];

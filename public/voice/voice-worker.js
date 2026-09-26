@@ -147,7 +147,8 @@ async function blendedStyle(mix, tokenCount) {
 async function speak({ id, text, voice, speed }) {
   const { tf, phonemize, model, tokenizer } = await loadEngine();
   const pieces = [];
-  const gap = new Float32Array(Math.round(SAMPLE_RATE * 0.22));
+  // A deliberate pause between sentences reads as calm and authoritative.
+  const gap = new Float32Array(Math.round(SAMPLE_RATE * 0.34));
   for (const sentence of splitSentences(normalize(text))) {
     // "en" = British-style espeak phonemes; Indian English is non-rhotic, so
     // this pairs better with the Hindi speaker styles than en-us does.

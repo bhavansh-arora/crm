@@ -72,13 +72,25 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   enquiry form, WhatsApp, CTAs, reviews, analytics) and outdated code
   (obsolete tags, old copyright year, broken links, old jQuery/WordPress).
   Every problem comes with why it costs the business customers and how to fix
-  it. With `ANTHROPIC_API_KEY` set, Claude also looks at a full-page
-  screenshot and writes a plain-English summary, the top problems, design
-  observations, quick wins and a closing pitch. The same page renders a
-  60-90 second **walkthrough video** in the browser: an animated score
-  intro, a guided scroll down the real site with each problem called out,
-  captions, a soft synthesised music bed, and an outro with your agency's
-  name and contact line — narrated by our own Indian English voice
+  it. It also shows **what a phone visitor sees above the fold** (a real
+  iPhone capture) with a checklist of what's visible vs missing, reviews the
+  **headline and page outline**, grades the site as a **marketing funnel**
+  (TOF: get found & grab attention, MOF: build trust — services,
+  testimonials, proof, FAQ, pricing — and BOF: calls, WhatsApp, forms,
+  booking, offers) with the biggest leak flagged, and lists the
+  **testimonials and trust signals** found on the page. With
+  `ANTHROPIC_API_KEY` set, Claude also looks at the desktop and mobile
+  screenshots and writes a plain-English summary, a verdict on the mobile
+  first screen, headline critique with three stronger rewrites, a
+  stage-by-stage funnel diagnosis, social-proof recommendations, the top
+  problems, design observations, quick wins and a closing pitch. The same page renders a
+  2-minute chaptered **walkthrough video** in the browser: an animated
+  score intro; the phone's first screen with the fold marked; the headline
+  struck through and rewritten; an animated TOF/MOF/BOF funnel with the
+  leak highlighted; the site's real testimonials; a guided cursor tour down
+  the page with each problem spotlighted; word-by-word captions,
+  crossfades, a soft synthesised music bed, and an outro with your
+  agency's name and contact line — narrated by our own Indian English voice
   (see "Narration voice" below), then exported as MP4/WebM to send to the
   prospect.
   Also: save the report as PDF, or copy a ready-made WhatsApp summary. See
@@ -287,8 +299,11 @@ The video is narrated by our own voices — **Aarohi** (female) and **Arjun**
 model (Apache-2.0): each voice is a custom blend of Kokoro's Hindi speaker
 styles, which speak English with a natural Indian accent, plus a small
 share of a British speaker for crisp consonants. Reps can tune the
-**Accent** (neutral ↔ strong Indian) and **Pace**, and hear a sample
-before recording.
+**Accent** (neutral ↔ strong Indian), **Pace** and **Authority** (a
+slightly deeper, more commanding delivery), and hear a sample before
+recording. Narration runs through a broadcast-style chain (warmth,
+presence, gentle compression) and the AI writes it as confident,
+declarative statements.
 
 - The model (~90 MB) downloads once from Hugging Face on first use and is
   then cached by the browser; the engine code loads from jsDelivr.

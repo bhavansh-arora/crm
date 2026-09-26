@@ -1,6 +1,7 @@
 import { analyzeSite } from "./analyze";
 import { generateAiReport } from "./ai";
-import { fetchThumScreenshot } from "./screenshot";
+import { buildFunnel, extractContent } from "./content";
+import { fetchMobileScreenshot, fetchThumScreenshot } from "./screenshot";
 import type { AuditCategory, AuditCheck, AuditReport, VideoScene } from "./types";
 
 const CATEGORY_WEIGHTS: Record<string, number> = {
@@ -27,38 +28,75 @@ export function worstIssues(categories: AuditCategory[], n: number): (AuditCheck
 }
 
 // Used when no ANTHROPIC_API_KEY is configured (or the AI call fails), so the
-// video still works — just with a template script instead of a tailored one.
-export function templateScript(report: Pick<AuditReport, "domain" | "overallScore" | "grade" | "categories">): VideoScene[] {
-  const issues = worstIssues(report.categories, 5);
+// video still works — a structured script built from the findings.
+export function templateScript(
+  report: Pick<AuditReport, "domain" | "overallScore" | "grade" | "categories" | "content" | "funnel">
+): VideoScene[] {
+  const { domain, overallScore, content, funnel } = report;
+  const issues = worstIssues(report.categories, 3);
+  const weakest = [...funnel].sort((a, b) => a.score - b.score)[0];
+  const missingBof = funnel.find((f) => f.id === "bof")!.items.filter((i) => i.status === "no").map((i) => i.label.toLowerCase());
+  const short = (t: string, n = 70) => (t.length > n ? t.slice(0, n - 1) + "…" : t);
+
   const scenes: VideoScene[] = [
     {
       kind: "intro",
-      title: `Website review: ${report.domain}`,
-      narration: `Let's take a walk through ${report.domain}. We ran a full audit covering speed, security, Google visibility, mobile experience and how well the site turns visitors into customers. It scored ${report.overallScore} out of 100.`,
+      title: "An honest look at what's costing you customers",
+      narration: `This is a review of ${domain}. We examined it the way your customers experience it: on their phones, on Google, and at the moment they decide whether to contact you. It scores ${overallScore} out of 100. Here is what that means.`,
       focus: 0,
       bullets: [],
     },
     {
-      kind: "walkthrough",
-      title: "First impression",
-      narration: "This is what a visitor sees first. You have about three seconds to convince them to stay, so the top of the page has to say clearly what you do and how to get in touch.",
+      kind: "mobile",
+      title: "The first three seconds on a phone",
+      narration: `Most of your visitors arrive on a mobile phone. This is exactly what they see before they scroll. In these first three seconds, a visitor must understand what you offer and how to reach you. ${missingBof.includes("tap-to-call") ? "Right now, there is no one-tap way to call you." : "Every element on this screen has to earn its place."}`,
       focus: 0,
+      bullets: [],
+    },
+    {
+      kind: "headline",
+      title: "Your headline",
+      narration: content.heroHeadline
+        ? `Your main headline reads: ${short(content.heroHeadline, 90)}. A strong headline states who you help and the result you deliver, in under ten words. This one needs to work harder.`
+        : "Your homepage has no clear headline. A visitor lands and has to guess what you do. That is the fastest way to lose them.",
+      focus: 0.02,
+      currentHeadline: content.heroHeadline ?? "",
+      rewrite: "",
+      bullets: [],
+    },
+    {
+      kind: "funnel",
+      title: "How the site converts visitors",
+      narration: `A website has three jobs. Top of funnel: get found and grab attention. Middle of funnel: build trust. Bottom of funnel: turn interest into an enquiry. Your weakest stage is the ${weakest.name.toLowerCase()}, scoring ${weakest.score} out of 100. That is where customers are leaking out.`,
+      focus: 0.3,
+      bullets: [],
+    },
+    {
+      kind: "proof",
+      title: "Proof that others trust you",
+      narration: content.testimonials.length
+        ? `You do have testimonials, and that matters. But they need to be specific, visible, and backed by real names and ratings. Ninety percent of customers read reviews before they buy.`
+        : "There are no testimonials on this page. Ninety percent of customers read reviews before they buy. Without proof, even a great business looks like a risk.",
+      focus: 0.6,
+      quote: content.testimonials[0] ?? "",
       bullets: [],
     },
   ];
   issues.forEach((issue, i) => {
+    // Title with the problem itself ("No tap-to-call link"), not the check name.
+    const problem = issue.detail.split(/ — |\. /)[0].replace(/\.$/, "");
     scenes.push({
       kind: "issue",
-      title: `${issue.title}: ${issue.status === "fail" ? "failing" : "needs work"}`,
+      title: problem.length <= 48 ? problem : issue.title,
       narration: `${issue.detail} ${issue.impact ?? ""}`.trim(),
-      focus: Math.min(1, (i + 1) / (issues.length + 1)),
-      bullets: [issue.category, issue.fix ? `Fix: ${issue.fix}` : ""].filter(Boolean).map((b) => (b.length > 110 ? b.slice(0, 107) + "…" : b)),
+      focus: Math.min(1, 0.35 + (i * 0.6) / Math.max(issues.length, 1)),
+      bullets: [issue.impact ?? "", issue.fix ? `Fix: ${issue.fix}` : ""].filter(Boolean).map((b) => (b.length > 110 ? b.slice(0, 107) + "…" : b)),
     });
   });
   scenes.push({
     kind: "outro",
-    title: "The good news: it's all fixable",
-    narration: `Every one of these problems can be fixed. With a faster, mobile-friendly site that makes it easy to call or enquire, ${report.domain} could be turning far more visitors into paying customers.`,
+    title: "Every one of these is fixable",
+    narration: `None of this is permanent. With a sharper headline, visible proof, and a clear way to enquire from any phone, ${domain} can turn far more of its visitors into paying customers.`,
     focus: 1,
     bullets: [],
   });
@@ -70,11 +108,14 @@ export async function runAudit(url: string): Promise<AuditReport> {
   const analysis = await analyzeSite(url);
   const target = analysis.finalUrl;
 
-  const screenshot = await fetchThumScreenshot(target);
-  const screenshotSource: AuditReport["screenshotSource"] = screenshot ? "thum.io" : null;
+  const [screenshot, mobileScreenshot] = await Promise.all([fetchThumScreenshot(target), fetchMobileScreenshot(target)]);
+  const screenshotSource: AuditReport["screenshotSource"] = screenshot || mobileScreenshot ? "thum.io" : null;
   if (!screenshot) warnings.push("Couldn't capture a screenshot of the site — the video will use title cards only.");
+  if (!mobileScreenshot) warnings.push("Couldn't capture the mobile view of the site.");
 
   const categories = analysis.categories;
+  const content = extractContent(analysis.html, target);
+  const funnel = buildFunnel(content, categories);
   let weighted = 0;
   let totalWeight = 0;
   for (const c of categories) {
@@ -84,7 +125,7 @@ export async function runAudit(url: string): Promise<AuditReport> {
   const overallScore = Math.round(weighted / totalWeight);
   const domain = new URL(target).hostname.replace(/^www\./, "");
 
-  const base = { domain, overallScore, grade: gradeFor(overallScore), categories };
+  const base = { domain, overallScore, grade: gradeFor(overallScore), categories, content, funnel };
 
   let ai: AuditReport["ai"] = null;
   let aiError: string | null = null;
@@ -97,6 +138,9 @@ export async function runAudit(url: string): Promise<AuditReport> {
         overallScore,
         categories,
         screenshot,
+        mobileScreenshot,
+        content,
+        funnel,
         textExcerpt: analysis.textExcerpt,
       });
       ai = result.summary;
@@ -117,6 +161,7 @@ export async function runAudit(url: string): Promise<AuditReport> {
     pageTitle: analysis.pageTitle,
     ...base,
     screenshot,
+    mobileScreenshot,
     screenshotSource,
     ai,
     aiError,

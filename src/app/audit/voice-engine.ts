@@ -1,4 +1,4 @@
-import { voiceMix, type VoiceSettings } from "./voices";
+import { depthFactor, voiceMix, type VoiceSettings } from "./voices";
 
 // Thin client for public/voice/voice-worker.js — our in-browser narration
 // engine. One shared worker per tab; the model is downloaded once and then
@@ -71,6 +71,8 @@ export async function synthesize(text: string, settings: VoiceSettings): Promise
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    getWorker().postMessage({ type: "speak", id, text, voice: { mix: voiceMix(settings) }, speed: settings.speed });
+    // Synthesise faster by the depth factor; playing it back at that rate
+    // (see VideoStudio) lowers the pitch and restores the chosen pace.
+    getWorker().postMessage({ type: "speak", id, text, voice: { mix: voiceMix(settings) }, speed: settings.speed / depthFactor(settings) });
   });
 }

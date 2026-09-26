@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { apiRequest } from "@/lib/fetcher";
 import type { AuditCategory, AuditCheck, AuditReport, CategoryId } from "@/lib/site-audit/types";
 import { fontVars } from "./fonts";
+import { Card, SectionHeading, tone } from "./report-ui";
+import { FunnelSection, HeadlineSection, MobileSection, ProofSection } from "./ReportSections";
 import VideoStudio from "./VideoStudio";
 
 const STEPS = [
@@ -45,14 +47,6 @@ const CATEGORY_BLURB: Record<CategoryId, string> = {
   technology: "Outdated code, broken links, CMS",
 };
 
-function tone(score: number) {
-  return score >= 75
-    ? { text: "text-emerald-700", bar: "bg-emerald-500", stroke: "#3fb68b", label: "Healthy" }
-    : score >= 50
-      ? { text: "text-amber-700", bar: "bg-amber-500", stroke: "#e0a93b", label: "Needs work" }
-      : { text: "text-rose-700", bar: "bg-rose-500", stroke: "#e5484d", label: "Critical" };
-}
-
 const STATUS_STYLE: Record<AuditCheck["status"], { dot: string; label: string }> = {
   fail: { dot: "bg-rose-500", label: "Failing" },
   warn: { dot: "bg-amber-400", label: "Needs work" },
@@ -89,20 +83,6 @@ function ScoreRing({ score, grade, size = 176 }: { score: number; grade: string;
       </div>
     </div>
   );
-}
-
-function SectionHeading({ n, title, kicker }: { n: string; title: string; kicker?: string }) {
-  return (
-    <div className="mb-5 flex items-baseline gap-4 border-b border-slate-200 pb-3">
-      <span className="font-display text-lg text-gold-600">{n}</span>
-      <h2 className="font-display text-2xl font-semibold text-ink-900">{title}</h2>
-      {kicker && <span className="ml-auto hidden text-xs uppercase tracking-[0.16em] text-slate-400 sm:block">{kicker}</span>}
-    </div>
-  );
-}
-
-function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`break-inside-avoid rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200/80 sm:p-8 ${className}`}>{children}</div>;
 }
 
 function CategoryCard({ category }: { category: AuditCategory }) {
@@ -419,13 +399,19 @@ export default function AuditClient({ initialUrl }: { initialUrl: string }) {
           </Card>
 
           {report.ai && (
+            <Card>
+              <SectionHeading n={nextSection()} title="Executive summary" />
+              <p className="max-w-3xl font-display text-xl leading-relaxed text-slate-700">{report.ai.executiveSummary}</p>
+            </Card>
+          )}
+
+          <MobileSection report={report} n={nextSection()} />
+          <HeadlineSection report={report} n={nextSection()} />
+          <FunnelSection report={report} n={nextSection()} />
+          <ProofSection report={report} n={nextSection()} />
+
+          {report.ai && (
             <>
-              <Card>
-                <SectionHeading n={nextSection()} title="Executive summary" />
-                <p className="max-w-3xl font-display text-xl leading-relaxed text-slate-700">
-                  {report.ai.executiveSummary}
-                </p>
-              </Card>
 
               <Card>
                 <SectionHeading n={nextSection()} title="Why this website is losing customers" />

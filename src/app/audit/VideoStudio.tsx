@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { mobileChecklist } from "@/lib/site-audit/checklist";
 import type { AuditReport, VideoScene } from "@/lib/site-audit/types";
 import { BODY_FONT, DISPLAY_FONT } from "./fonts";
 import { renderAmbientMusic } from "./music";
 import { estimateDuration, renderFrame, VIDEO_H, VIDEO_W, type RenderInput, type TimedScene } from "./video-renderer";
 import { loadVoiceEngine, synthesize, VOICE_SAMPLE_RATE } from "./voice-engine";
-import { DEFAULT_VOICE_SETTINGS, VOICES, type VoiceSettings } from "./voices";
+import { DEFAULT_VOICE_SETTINGS, depthFactor, VOICES, type VoiceSettings } from "./voices";
 
 type Mode = "idle" | "preview" | "recording";
 type VoiceStatus =
@@ -34,7 +35,7 @@ function savePref(key: string, value: unknown) {
   }
 }
 
-const settingsKey = (s: VoiceSettings) => `${s.voice}|${s.accent.toFixed(2)}|${s.speed.toFixed(2)}`;
+const settingsKey = (s: VoiceSettings) => `${s.voice}|${s.accent.toFixed(2)}|${s.speed.toFixed(2)}|${(s.authority ?? 0).toFixed(2)}`;
 
 function Slider({ label, value, min, max, step, left, right, onChange }: {
   label: string; value: number; min: number; max: number; step: number; left: string; right: string; onChange: (v: number) => void;
@@ -55,6 +56,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scenes, setScenes] = useState<VideoScene[]>(report.videoScript);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [mobileImage, setMobileImage] = useState<HTMLImageElement | null>(null);
   const [fontsReady, setFontsReady] = useState(0);
   const [agencyName, setAgencyName] = useState("");
   const [agencyContact, setAgencyContact] = useState("");
@@ -80,7 +82,8 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   useEffect(() => {
     setAgencyName(loadPref("audit.agencyName", ""));
     setAgencyContact(loadPref("audit.agencyContact", ""));
-    setVoice(loadPref("audit.voice", DEFAULT_VOICE_SETTINGS));
+    // Merge so settings saved before a new option existed pick up its default.
+    setVoice({ ...DEFAULT_VOICE_SETTINGS, ...loadPref<Partial<VoiceSettings>>("audit.voice", {}) });
     setIncludeMusic(loadPref("audit.music", true));
     // Canvas text only picks up web fonts once they're loaded.
     Promise.all([
@@ -97,13 +100,14 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   useEffect(() => {
     setScenes(report.videoScript);
     setVideoUrl(null);
-    if (!report.screenshot) {
-      setImage(null);
-      return;
-    }
-    const img = new Image();
-    img.onload = () => setImage(img);
-    img.src = report.screenshot;
+    const load = (src: string | null, set: (img: HTMLImageElement | null) => void) => {
+      if (!src) return set(null);
+      const img = new Image();
+      img.onload = () => set(img);
+      img.src = src;
+    };
+    load(report.screenshot, setImage);
+    load(report.mobileScreenshot, setMobileImage);
   }, [report]);
 
   const vKey = settingsKey(voice);
@@ -130,9 +134,36 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
         .filter((c) => c.status === "fail" && c.fix)
         .slice(0, 4)
         .map((c) => c.fix!);
+    const content = report.content;
+    const ai = report.ai;
+    const leak = ai?.funnel.biggestLeak ?? [...report.funnel].sort((a, b) => a.score - b.score)[0].id;
+    const funnelLine = (id: "tof" | "mof" | "bof") => {
+      if (ai) return ai.funnel[id];
+      const stage = report.funnel.find((f) => f.id === id)!;
+      const gaps = stage.items.filter((i) => i.status === "no").map((i) => i.label.toLowerCase());
+      return gaps.length ? `Missing: ${gaps.slice(0, 3).join(", ")}.` : "In good shape.";
+    };
     return {
       scenes: timed,
       screenshot: image,
+      mobileShot: mobileImage,
+      mobileChecklist: mobileChecklist(report),
+      headline: {
+        current: ai?.headlineReview.current ?? content.heroHeadline ?? "",
+        rewrite: ai?.headlineReview.rewrites[0] ?? "",
+        problems: ai?.headlineReview.problems ?? [],
+      },
+      funnel: report.funnel.map((f) => ({ id: f.id, name: f.name, goal: f.goal, score: f.score, line: funnelLine(f.id) })),
+      biggestLeak: leak,
+      proof: {
+        quotes: content.testimonials,
+        trust: content.trustSignals,
+        points: ai?.socialProof.recommendations ?? [
+          "Show your Google rating near the top",
+          "Add real names, cities and photos",
+          "Feature one strong customer story",
+        ],
+      },
       domain: report.domain,
       score: report.overallScore,
       grade: report.grade,
@@ -141,7 +172,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
       outroPoints,
       fonts,
     };
-  }, [timed, image, report, agencyName, agencyContact, fonts]);
+  }, [timed, image, mobileImage, report, agencyName, agencyContact, fonts]);
 
   useEffect(() => {
     if (mode !== "idle") return;
@@ -149,13 +180,46 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     if (ctx) renderFrame(ctx, renderInput, Math.min(3.2, total));
   }, [renderInput, mode, total, fontsReady]);
 
+  // Broadcast-style voice processing: a little chest warmth, less boxiness,
+  // extra presence, and gentle compression for a steady, commanding delivery.
+  function voiceChain(actx: BaseAudioContext, outputs: AudioNode[]): AudioNode {
+    const warmth = actx.createBiquadFilter();
+    warmth.type = "lowshelf";
+    warmth.frequency.value = 170;
+    warmth.gain.value = 3.5;
+    const mud = actx.createBiquadFilter();
+    mud.type = "peaking";
+    mud.frequency.value = 420;
+    mud.Q.value = 1.1;
+    mud.gain.value = -2;
+    const presence = actx.createBiquadFilter();
+    presence.type = "peaking";
+    presence.frequency.value = 3200;
+    presence.Q.value = 0.9;
+    presence.gain.value = 2.5;
+    const comp = actx.createDynamicsCompressor();
+    comp.threshold.value = -22;
+    comp.knee.value = 8;
+    comp.ratio.value = 3;
+    comp.attack.value = 0.008;
+    comp.release.value = 0.2;
+    const makeup = actx.createGain();
+    makeup.gain.value = 1.35;
+    warmth.connect(mud).connect(presence).connect(comp).connect(makeup);
+    outputs.forEach((o) => makeup.connect(o));
+    return warmth;
+  }
+
   function getAudioCtx() {
     if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
     return audioCtxRef.current;
   }
 
-  function toAudioBuffer(samples: Float32Array<ArrayBuffer>): AudioBuffer {
-    const buf = getAudioCtx().createBuffer(1, samples.length, VOICE_SAMPLE_RATE);
+  // Labelling the samples with a lower sample rate plays them back slower
+  // and deeper — the "authority" effect (the engine synthesised them faster
+  // to compensate, so the pace is unchanged).
+  function toAudioBuffer(samples: Float32Array<ArrayBuffer>, settings: VoiceSettings = voice): AudioBuffer {
+    const buf = getAudioCtx().createBuffer(1, samples.length, Math.round(VOICE_SAMPLE_RATE * depthFactor(settings)));
     buf.copyToChannel(samples, 0);
     return buf;
   }
@@ -186,7 +250,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
       const actx = getAudioCtx();
       const src = actx.createBufferSource();
       src.buffer = toAudioBuffer(samples);
-      src.connect(actx.destination);
+      src.connect(voiceChain(actx, [actx.destination]));
       src.start();
     } catch (err) {
       setVoiceStatus({ state: "error", message: err instanceof Error ? err.message : "Voice engine failed" });
@@ -272,14 +336,15 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     const wallStart = performance.now() + 250;
     const now = () => (actx.state === "running" ? actx.currentTime - t0 : (performance.now() - wallStart) / 1000);
 
-    const schedule = (buffer: AudioBuffer, at: number, gain = 1) => {
+    const schedule = (buffer: AudioBuffer, at: number, gain = 1, isVoice = false) => {
       const src = actx.createBufferSource();
       src.buffer = buffer;
       const g = actx.createGain();
       g.gain.value = gain;
       src.connect(g);
-      g.connect(actx.destination);
-      if (dest) g.connect(dest);
+      const outs: AudioNode[] = dest ? [actx.destination, dest] : [actx.destination];
+      if (isVoice) g.connect(voiceChain(actx, outs));
+      else outs.forEach((o) => g.connect(o));
       src.start(at);
       cleanups.push(() => {
         try {
@@ -289,7 +354,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
         }
       });
     };
-    if (haveVoice) sceneTimes.forEach((s) => schedule(s.buf!, t0 + s.start + 0.5));
+    if (haveVoice) sceneTimes.forEach((s) => schedule(s.buf!, t0 + s.start + 0.6, 1, true));
     if (music) schedule(music, t0, MUSIC_GAIN);
 
     let recorder: MediaRecorder | null = null;
@@ -488,7 +553,8 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
           </div>
 
           <Slider label="Accent" value={voice.accent} min={0.5} max={1} step={0.05} left="Neutral" right="Strong Indian" onChange={(v) => updateVoice({ accent: v })} />
-          <Slider label="Pace" value={voice.speed} min={0.8} max={1.15} step={0.05} left="Measured" right="Brisk" onChange={(v) => updateVoice({ speed: v })} />
+          <Slider label="Pace" value={voice.speed} min={0.8} max={1.15} step={0.02} left="Measured" right="Brisk" onChange={(v) => updateVoice({ speed: v })} />
+          <Slider label="Authority" value={voice.authority} min={0} max={1} step={0.1} left="Natural" right="Commanding" onChange={(v) => updateVoice({ authority: v })} />
 
           <div className="space-y-2 text-sm">
             <label className="flex items-center justify-between gap-3">
