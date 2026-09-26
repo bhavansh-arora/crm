@@ -77,9 +77,10 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   observations, quick wins and a closing pitch. The same page renders a
   60-90 second **walkthrough video** in the browser: an animated score
   intro, a guided scroll down the real site with each problem called out,
-  captions, and an outro with your agency's name and contact line. Preview
-  it with the browser's voice, optionally generate an AI voiceover
-  (`ELEVENLABS_API_KEY`), then export an MP4/WebM to send to the prospect.
+  captions, a soft synthesised music bed, and an outro with your agency's
+  name and contact line — narrated by our own Indian English voice
+  (see "Narration voice" below), then exported as MP4/WebM to send to the
+  prospect.
   Also: save the report as PDF, or copy a ready-made WhatsApp summary. See
   "Website audit (optional keys)" below.
 - **One-touch calling**: a Call button on every lead dials out via the
@@ -261,13 +262,12 @@ Redeploy/restart after setting these.
 
 The Site Audit page works with no configuration: it fetches the site, runs
 ~50 checks and captures a full-page screenshot (via thum.io's free tier).
-Three optional keys make it better:
+Two optional keys make it better:
 
 | Env var | What it adds |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | AI-written report (summary, top problems, design review from the screenshot, pitch) and a video script tailored to the actual page. Without it the video uses a template script built from the top findings. |
 | `PAGESPEED_API_KEY` | Google Lighthouse mobile scores and Core Web Vitals. Free: Google Cloud Console → enable "PageSpeed Insights API" → Credentials → API key. Without it Google usually rate-limits the request and those scores are skipped. |
-| `ELEVENLABS_API_KEY` | A "Generate AI voiceover" button; the narration is then included in the exported video file. (`ELEVENLABS_VOICE_ID` picks a voice.) Without it, previews use the browser's built-in voice and exported videos have captions only. |
 
 Notes:
 - An audit takes 30-90 seconds. On Vercel the route asks for up to 300s
@@ -278,6 +278,28 @@ Notes:
   records.
 - The audit server only fetches public websites — localhost, private IPs
   and non-standard ports are refused.
+
+### Narration voice (no API key, no per-use cost)
+
+The video is narrated by our own voices — **Aarohi** (female) and **Arjun**
+(male) — speaking Indian English. They run entirely in the rep's browser
+(`public/voice/voice-worker.js`) on the open-weight
+[Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech
+model (Apache-2.0): each voice is a custom blend of Kokoro's Hindi speaker
+styles, which speak English with a natural Indian accent, plus a small
+share of a British speaker for crisp consonants. Reps can tune the
+**Accent** (neutral ↔ strong Indian) and **Pace**, and hear a sample
+before recording.
+
+- The model (~90 MB) downloads once from Hugging Face on first use and is
+  then cached by the browser; the engine code loads from jsDelivr.
+- Generating narration runs at roughly real-time speed on a typical laptop
+  (a 90-second video takes about a minute to narrate), and much faster on
+  repeat runs since unchanged scenes are reused.
+- `/audit` is served with cross-origin isolation headers (see
+  `next.config.js`) so the engine can use multi-threaded WebAssembly.
+- If the voice can't load (very old browser, blocked network), the video
+  still exports with on-screen captions.
 
 ## Notes
 
