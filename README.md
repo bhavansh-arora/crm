@@ -91,9 +91,14 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   score intro; the phone's first screen with the fold marked; the headline
   struck through and rewritten; an animated TOF/MOF/BOF funnel with the
   leak highlighted; the site's real testimonials; a guided cursor tour down
-  the page with each problem spotlighted; word-by-word captions,
-  crossfades, a soft synthesised music bed, and an outro with your
-  agency's name and contact line — narrated by our own Indian English voice
+  the page that spotlights only the exact section being discussed (things
+  that aren't visible on the page — like the Google description — are shown
+  as a mock Google result, missing sections as an "add it here" marker);
+  an on-screen presenter who lip-syncs to the narration (an illustrated
+  narrator matching the chosen voice, or the rep's own uploaded photo);
+  word-by-word captions timed to the voice; clean fade transitions; a soft
+  synthesised music bed; and a closing call-to-action scene with your
+  agency's name and contact details — narrated by our own Indian English voice
   (see "Narration voice" below), then exported as MP4/WebM to send to the
   prospect.
   Also: save the report as PDF, or copy a ready-made WhatsApp summary. See

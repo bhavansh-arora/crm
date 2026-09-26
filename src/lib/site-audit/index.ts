@@ -27,6 +27,11 @@ export function worstIssues(categories: AuditCategory[], n: number): (AuditCheck
     .slice(0, n);
 }
 
+// Checks about how the site appears on Google (not visible on the page),
+// and about things that are absent from the page.
+const GOOGLE_CHECKS = new Set(["title", "meta-description", "structured-data", "social-preview", "indexable", "canonical"]);
+const MISSING_CHECKS = new Set(["cta", "contact-form", "phone", "whatsapp", "social-proof", "tap-to-call", "privacy", "social-links", "email"]);
+
 // Used when no ANTHROPIC_API_KEY is configured (or the AI call fails), so the
 // video still works — a structured script built from the findings.
 export function templateScript(
@@ -88,11 +93,15 @@ export function templateScript(
   issues.forEach((issue, i) => {
     // Title with the problem itself ("No tap-to-call link"), not the check name.
     const problem = issue.detail.split(/ — |\. /)[0].replace(/\.$/, "");
+    // Only spotlight the page for things you can actually see there.
+    const visual = GOOGLE_CHECKS.has(issue.id) ? "google" : MISSING_CHECKS.has(issue.id) ? "missing" : issue.id === "copyright" ? "page" : "none";
     scenes.push({
       kind: "issue",
       title: problem.length <= 48 ? problem : issue.title,
       narration: `${issue.detail} ${issue.impact ?? ""}`.trim(),
-      focus: Math.min(1, 0.35 + (i * 0.6) / Math.max(issues.length, 1)),
+      focus: issue.id === "copyright" ? 0.96 : Math.min(1, 0.35 + (i * 0.6) / Math.max(issues.length, 1)),
+      span: issue.id === "copyright" ? 0.04 : undefined,
+      visual,
       bullets: [issue.impact ?? "", issue.fix ? `Fix: ${issue.fix}` : ""].filter(Boolean).map((b) => (b.length > 110 ? b.slice(0, 107) + "…" : b)),
     });
   });

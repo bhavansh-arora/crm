@@ -12,7 +12,13 @@ const SceneSchema = z.object({
   kind: z.enum(["intro", "mobile", "headline", "funnel", "proof", "walkthrough", "issue", "outro"]),
   title: z.string().describe("Short on-screen caption, max ~6 words"),
   narration: z.string().describe("What the narrator says during this scene, written to be spoken: 2-4 conversational sentences, ~25-50 words"),
-  focus: z.number().describe("Vertical position on the full-page desktop screenshot this scene shows: 0 = very top, 1 = very bottom"),
+  focus: z.number().describe("Where the section this scene discusses STARTS on the full-page desktop screenshot, as a fraction of the page height: 0 = very top, 1 = very bottom"),
+  span: z.number().describe("Height of that section as a fraction of the page height (e.g. 0.04 for a single heading, 0.12 for a large section). Keep it tight: just the part being discussed."),
+  visual: z
+    .enum(["page", "missing", "google", "none"])
+    .describe(
+      'How walkthrough/issue scenes illustrate the point: "page" = spotlight a specific, VISIBLE part of the page (use focus+span); "missing" = something that should exist but doesn\'t (focus = where it should go); "google" = search title/description/schema problems, shown as a Google result; "none" = behind-the-scenes issues with nothing visible (speed, security headers, code). Never spotlight a page section for something that isn\'t visible there.'
+    ),
   bullets: z.array(z.string()).describe("0-3 very short on-screen bullet points (max ~7 words each)"),
   currentHeadline: z.string().describe('For "headline" scenes: the site\'s current main headline, verbatim. Otherwise empty.'),
   rewrite: z.string().describe('For "headline" scenes: your single strongest rewrite (max ~10 words). Otherwise empty.'),
@@ -167,6 +173,7 @@ Write the report and the chaptered video script.`,
     scenes: scenes.map((s) => ({
       ...s,
       focus: Math.min(1, Math.max(0, s.focus)),
+      span: Math.min(0.5, Math.max(0.005, s.span)),
       currentHeadline: s.currentHeadline || undefined,
       rewrite: s.rewrite || undefined,
       quote: s.quote || undefined,

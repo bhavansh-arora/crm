@@ -14,11 +14,13 @@ export type VoicePreset = {
   natural: [string, number][];
   // Share of the Indian styles at the middle of the Accent slider.
   indianShare: number;
+  gender: "female" | "male";
 };
 
 export const VOICES: VoicePreset[] = [
   {
     id: "meera",
+    gender: "female",
     name: "Meera",
     description: "Warm, friendly and natural · female",
     indian: [["hf_alpha", 1]],
@@ -27,6 +29,7 @@ export const VOICES: VoicePreset[] = [
   },
   {
     id: "kavya",
+    gender: "female",
     name: "Kavya",
     description: "Bright, energetic and upbeat · female",
     indian: [["hf_beta", 1]],
@@ -38,6 +41,7 @@ export const VOICES: VoicePreset[] = [
   },
   {
     id: "ananya",
+    gender: "female",
     name: "Ananya",
     description: "Crisp, polished and professional · female",
     indian: [
@@ -49,6 +53,7 @@ export const VOICES: VoicePreset[] = [
   },
   {
     id: "rohan",
+    gender: "male",
     name: "Rohan",
     description: "Confident, conversational · male",
     indian: [["hm_omega", 1]],
@@ -60,6 +65,7 @@ export const VOICES: VoicePreset[] = [
   },
   {
     id: "dev",
+    gender: "male",
     name: "Dev",
     description: "Relaxed, easy-going · male",
     indian: [["hm_psi", 1]],

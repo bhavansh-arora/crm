@@ -11,7 +11,7 @@
 //               { type: "speak", id, text, voice: { mix: [[name, weight], ...] }, speed }
 // Messages out: { type: "progress", loaded, total }  (model download)
 //               { type: "ready", device }
-//               { type: "audio", id, samples: Float32Array, sampleRate, segments: [{ text, start, end }] }
+//               { type: "audio", id, samples: Float32Array, sampleRate, segments: [{ text, start, end, words: [{ text, start, end }] }] }
 //               { type: "error", id?, message }
 
 const TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js";
@@ -99,7 +99,7 @@ function normalize(text) {
     .replace(/(\d+(?:\.\d+)?)\s?MB\b/g, "$1 megabytes")
     .replace(/https?:\/\//gi, "")
     .replace(/\bwww\./gi, "")
-    .replace(/\b([a-z0-9-]+)\.(com|in|co\.in|net|org|io|co|biz|info)\b/gi, (_, d, tld) => `${d} dot ${tld.replace(".", " dot ")}`)
+    .replace(/\b([a-z0-9-]+)\.(co\.in|com|in|net|org|io|co|biz|info|store|shop|online|site|app|dev|ai|tech|xyz|me|us|uk)\b/gi, (_, d, tld) => `${d} dot ${tld.replace(".", " dot ")}`)
     .replace(/\bSEO\b/g, "S.E.O.")
     .replace(/\bHTTPS\b/g, "H.T.T.P.S.")
     .replace(/\bHTTP\b/g, "H.T.T.P.")
@@ -158,18 +158,138 @@ async function blendedStyle(mix, tokenCount) {
 // variation keeps the delivery lively instead of metronomic.
 const PACE_VARIATION = [0, 0.03, -0.02, 0.025, -0.015, 0.01];
 
+// Punctuation Kokoro understands. It must reach the model (espeak drops it),
+// or commas and full stops produce no pauses and words run together.
+const PUNCT = ';:,.!?¡¿—…"«»“”(){}[]';
+const PUNCT_RUN = new RegExp(`(\\s*[${PUNCT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}]+\\s*)+`, "g");
+
+async function toPhonemes(phonemize, text) {
+  const parts = [];
+  let last = 0;
+  for (const m of text.matchAll(PUNCT_RUN)) {
+    if (m.index > last) parts.push({ punct: false, text: text.slice(last, m.index) });
+    parts.push({ punct: true, text: m[0] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ punct: false, text: text.slice(last) });
+  const out = await Promise.all(parts.map(async (p) => (p.punct ? p.text : (await phonemize(p.text, "en-us")).join(" "))));
+  return out
+    .join("")
+    .replace(/ʲ/g, "j")
+    .replace(/r/g, "ɹ")
+    .replace(/x/g, "k")
+    .replace(/ɬ/g, "l")
+    .trim();
+}
+
+// Per-word timing for captions. The model doesn't report durations, so we
+// read them off the audio: find the real pauses, match them to the
+// sentence's commas/colons, and spread the words in between by how many
+// speech sounds each has.
+async function wordTimings(phonemize, sentence, wave) {
+  const words = sentence.split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const weights = await Promise.all(
+    words.map(async (w) => {
+      const core = normalize(w.replace(/^[^\w₹$]+|[^\w%]+$/g, ""));
+      if (!core) return 1;
+      const ph = (await phonemize(core, "en-us")).join("").replace(/[ˈˌː\s]/g, "");
+      return Math.max(1, ph.length);
+    })
+  );
+
+  const FRAME = 240; // 10 ms
+  const n = Math.floor(wave.length / FRAME);
+  const rms = new Float32Array(n);
+  for (let f = 0; f < n; f++) {
+    let sum = 0;
+    for (let k = 0; k < FRAME; k++) {
+      const v = wave[f * FRAME + k];
+      sum += v * v;
+    }
+    rms[f] = Math.sqrt(sum / FRAME);
+  }
+  const sorted = Array.from(rms).sort((a, b) => a - b);
+  const thr = Math.max(0.008, sorted[Math.floor(n * 0.95)] * 0.08);
+  let first = 0;
+  while (first < n && rms[first] < thr) first++;
+  let lastF = n - 1;
+  while (lastF > first && rms[lastF] < thr) lastF--;
+  const speechStart = (first * FRAME) / SAMPLE_RATE;
+  const speechEnd = ((lastF + 1) * FRAME) / SAMPLE_RATE;
+
+  // Silent runs inside the speech (candidate pauses), >= 60 ms.
+  const pauses = [];
+  for (let f = first; f <= lastF; f++) {
+    if (rms[f] >= thr) continue;
+    let g = f;
+    while (g <= lastF && rms[g] < thr) g++;
+    if (g - f >= 6) pauses.push({ start: (f * FRAME) / SAMPLE_RATE, end: (g * FRAME) / SAMPLE_RATE });
+    f = g;
+  }
+
+  // Word indices followed by a spoken break.
+  const breaks = [];
+  words.forEach((w, i) => {
+    if (i < words.length - 1 && /[,;:—…)]$|^\S+\s*—$/.test(w)) breaks.push(i);
+  });
+  const total = weights.reduce((a, b) => a + b, 0);
+  const cum = [];
+  weights.reduce((acc, w, i) => ((cum[i] = acc + w), acc + w), 0);
+  const expected = (i) => speechStart + ((speechEnd - speechStart) * cum[i]) / total;
+
+  // Match each break to the nearest unused pause around where we'd expect it.
+  const anchors = [];
+  const used = new Set();
+  for (const b of breaks) {
+    let best = -1;
+    let bestDist = 0.7;
+    pauses.forEach((p, pi) => {
+      if (used.has(pi)) return;
+      const d = Math.abs((p.start + p.end) / 2 - expected(b));
+      if (d < bestDist) {
+        bestDist = d;
+        best = pi;
+      }
+    });
+    if (best >= 0) {
+      used.add(best);
+      anchors.push({ word: b, end: pauses[best].start, next: pauses[best].end });
+    }
+  }
+  anchors.sort((a, b) => a.word - b.word);
+
+  const timings = new Array(words.length);
+  let spanStart = speechStart;
+  let firstWord = 0;
+  const spans = [...anchors, { word: words.length - 1, end: speechEnd, next: speechEnd }];
+  for (const a of spans) {
+    let w = 0;
+    for (let i = firstWord; i <= a.word; i++) w += weights[i];
+    let t = spanStart;
+    for (let i = firstWord; i <= a.word; i++) {
+      const d = ((a.end - spanStart) * weights[i]) / w;
+      timings[i] = { text: words[i], start: t, end: t + d };
+      t += d;
+    }
+    spanStart = a.next;
+    firstWord = a.word + 1;
+  }
+  return timings;
+}
+
 async function speak({ id, text, voice, speed }) {
   const { tf, phonemize, model, tokenizer } = await loadEngine();
   const pieces = [];
   const segments = [];
-  const gap = new Float32Array(Math.round(SAMPLE_RATE * 0.16));
+  const gap = new Float32Array(Math.round(SAMPLE_RATE * 0.18));
   let cursor = 0;
   const sentences = splitSentences(text);
   for (let i = 0; i < sentences.length; i++) {
     const sentence = sentences[i];
-    // "en" = British-style espeak phonemes; Indian English is non-rhotic, so
-    // this pairs better with the Hindi speaker styles than en-us does.
-    const phonemes = (await phonemize(normalize(sentence), "en")).join(" ").replace(/r/g, "ɹ").replace(/x/g, "k").replace(/ʲ/g, "j");
+    // American-style (rhotic) phonemes: Indian English pronounces the "r",
+    // and in testing they were clearly more intelligible ("store", not "stor").
+    const phonemes = await toPhonemes(phonemize, normalize(sentence));
     const { input_ids } = tokenizer(phonemes, { truncation: true });
     const style = await blendedStyle(voice.mix, input_ids.dims.at(-1));
     const pace = (speed ?? 1) * (1 + PACE_VARIATION[i % PACE_VARIATION.length]);
@@ -182,8 +302,9 @@ async function speak({ id, text, voice, speed }) {
       pieces.push(gap);
       cursor += gap.length;
     }
-    // Exact timing of each spoken sentence, so captions can follow the voice.
-    segments.push({ text: sentence, start: cursor / SAMPLE_RATE, end: (cursor + waveform.data.length) / SAMPLE_RATE });
+    const offset = cursor / SAMPLE_RATE;
+    const words = (await wordTimings(phonemize, sentence, waveform.data)).map((w) => ({ ...w, start: w.start + offset, end: w.end + offset }));
+    segments.push({ text: sentence, start: offset, end: (cursor + waveform.data.length) / SAMPLE_RATE, words });
     pieces.push(waveform.data);
     cursor += waveform.data.length;
   }

@@ -1,4 +1,5 @@
 import type { VideoScene } from "@/lib/site-audit/types";
+import { drawPresenter, type Presenter } from "./presenter";
 
 // Draws one frame of the walkthrough video onto a 1280x720 canvas for a given
 // time `t` (seconds). Stateless per frame, so preview and recording are
@@ -13,7 +14,10 @@ export type TimedScene = VideoScene & {
   duration: number;
   // When the narration was synthesised: where it starts in the scene, and
   // when each sentence is spoken (relative to that start).
-  speech?: { lead: number; segments: { text: string; start: number; end: number }[] };
+  speech?: {
+    lead: number;
+    segments: { text: string; start: number; end: number; words?: { text: string; start: number; end: number }[] }[];
+  };
 };
 
 export type RenderInput = {
@@ -25,6 +29,8 @@ export type RenderInput = {
   funnel: { id: "tof" | "mof" | "bof"; name: string; goal: string; score: number; line: string }[];
   biggestLeak: "tof" | "mof" | "bof";
   proof: { quotes: string[]; trust: string[]; points: string[]; sectionTitle: string | null };
+  serp: { title: string; description: string; url: string; hasSchema: boolean };
+  presenter: Presenter | null;
   domain: string;
   score: number;
   grade: string;
@@ -184,30 +190,46 @@ type TimedWord = { word: string; at: number };
 type CaptionChunk = TimedWord[];
 
 // Caption lines for a scene, each word stamped with when it is spoken.
-// With real narration we use the exact sentence timings from the voice
-// engine; inside a sentence, time is spread by word length (plus a beat at
-// commas), which tracks natural speech closely.
+// With real narration the voice engine reports per-word timings (measured
+// from the audio's actual pauses); otherwise time is estimated.
+const CAPTION_LEAD = 0.1; // light a word just before it's heard — trailing feels laggy
 function captionChunks(scene: TimedScene): CaptionChunk[] {
+  const lead = scene.speech?.lead ?? 0;
   const segments = scene.speech
-    ? scene.speech.segments.map((sg) => ({ text: sg.text, start: sg.start + scene.speech!.lead, end: sg.end + scene.speech!.lead }))
-    : [{ text: scene.narration, start: 0.35, end: Math.max(0.5, scene.duration - 0.5) }];
+    ? scene.speech.segments
+    : [{ text: scene.narration, start: 0.35, end: Math.max(0.5, scene.duration - 0.5), words: undefined }];
   const chunks: CaptionChunk[] = [];
   for (const sg of segments) {
-    const words = sg.text.split(/\s+/).filter(Boolean);
-    if (!words.length) continue;
-    const weights = words.map((w) => w.length + 1 + (/[,;:]$/.test(w) ? 3 : 0) + (/[.!?]$/.test(w) ? 2 : 0));
-    const total = weights.reduce((a, b) => a + b, 0);
-    let acc = 0;
-    const timed = words.map((word, i) => {
-      // Light each word ~0.15s early: reading a word as it's heard feels in
-      // sync, while trailing the voice feels laggy.
-      const at = sg.start + ((sg.end - sg.start) * acc) / total - 0.15;
-      acc += weights[i];
-      return { word, at };
-    });
-    const n = Math.ceil(timed.length / 12);
-    const size = Math.ceil(timed.length / n);
-    for (let i = 0; i < timed.length; i += size) chunks.push(timed.slice(i, i + size));
+    let timed: TimedWord[];
+    if (sg.words?.length) {
+      timed = sg.words.map((w) => ({ word: w.text, at: w.start + lead - CAPTION_LEAD }));
+    } else {
+      const words = sg.text.split(/\s+/).filter(Boolean);
+      if (!words.length) continue;
+      const weights = words.map((w) => w.length + 1 + (/[,;:]$/.test(w) ? 3 : 0) + (/[.!?]$/.test(w) ? 2 : 0));
+      const total = weights.reduce((a, b) => a + b, 0);
+      let acc = 0;
+      timed = words.map((word, i) => {
+        const at = sg.start + lead + ((sg.end - sg.start) * acc) / total - CAPTION_LEAD;
+        acc += weights[i];
+        return { word, at };
+      });
+    }
+    // Long sentences split into lines of up to ~11 words, preferring to break after punctuation.
+    let i = 0;
+    while (i < timed.length) {
+      let end = Math.min(timed.length, i + 11);
+      if (end < timed.length) {
+        for (let k = end - 1; k > i + 4; k--) {
+          if (/[,;:—]$/.test(timed[k].word)) {
+            end = k + 1;
+            break;
+          }
+        }
+      }
+      chunks.push(timed.slice(i, end));
+      i = end;
+    }
   }
   return chunks;
 }
@@ -220,7 +242,7 @@ function subtitles(ctx: CanvasRenderingContext2D, f: RenderInput["fonts"], scene
   const chunk = chunks[ci];
 
   ctx.font = `400 23px ${f.body}`;
-  const lines = wrapLines(ctx, chunk.map((w) => w.word).join(" "), 1000).slice(0, 2);
+  const lines = wrapLines(ctx, chunk.map((w) => w.word).join(" "), 800).slice(0, 2);
   const lh = 32;
   const h = lines.length * lh + 22;
   const y = VIDEO_H - 30 - h;
@@ -377,10 +399,10 @@ function drawMobile(ctx: CanvasRenderingContext2D, input: RenderInput, scene: Ti
     ctx.fillStyle = c.ok ? "rgba(63,182,139,0.9)" : "rgba(255,138,141,0.95)";
     ctx.font = `600 13px ${f.body}`;
     const tag = c.ok ? "VISIBLE" : "MISSING";
-    spaced(ctx, tag, panelX + 560 - spacedWidth(ctx, tag, 2), y - 1, 2);
+    spaced(ctx, tag, panelX + 500 - spacedWidth(ctx, tag, 2), y - 1, 2);
     ctx.font = `400 21px ${f.body}`;
     ctx.fillStyle = "rgba(250,248,243,0.08)";
-    ctx.fillRect(panelX, y + 16, 560, 1);
+    ctx.fillRect(panelX, y + 16, 500, 1);
     y += 54;
   });
   ctx.globalAlpha = 1;
@@ -519,15 +541,15 @@ function drawFunnel(ctx: CanvasRenderingContext2D, input: RenderInput, scene: Ti
     }
   });
 
-  // Right panel: stage-by-stage verdicts.
-  const panelX = 700;
+  // Right panel: stage-by-stage verdicts (clear of the "biggest leak" badge).
+  const panelX = 770;
   ctx.globalAlpha = reveal(local, 0.3);
   ctx.fillStyle = GOLD;
   ctx.font = `600 13px ${f.body}`;
   spaced(ctx, "TOF  ·  MOF  ·  BOF", panelX, 120, 2.6);
   ctx.fillStyle = IVORY;
   ctx.font = `600 36px ${f.display}`;
-  let y = drawWrapped(ctx, scene.title, panelX, 172, 520, 44, 2) + 26;
+  let y = drawWrapped(ctx, scene.title, panelX, 172, 450, 44, 2) + 26;
   input.funnel.forEach((stage, i) => {
     ctx.globalAlpha = reveal(local, 0.9 + i * 0.5) * (i === activeIdx ? 1 : 0.55);
     ctx.fillStyle = i === activeIdx ? GOLD_SOFT : "rgba(250,248,243,0.7)";
@@ -535,7 +557,7 @@ function drawFunnel(ctx: CanvasRenderingContext2D, input: RenderInput, scene: Ti
     ctx.fillText(stage.name, panelX, y);
     ctx.fillStyle = "rgba(250,248,243,0.82)";
     ctx.font = `400 17px ${f.body}`;
-    y = drawWrapped(ctx, stage.line, panelX, y + 28, 520, 25, 3) + 22;
+    y = drawWrapped(ctx, stage.line, panelX, y + 28, 450, 24, 2) + 20;
   });
   ctx.globalAlpha = 1;
 }
@@ -747,27 +769,164 @@ function drawOutro(ctx: CanvasRenderingContext2D, input: RenderInput, scene: Tim
     y = drawWrapped(ctx, p, 506, y + 30, 700, 30, 2) + 12;
   });
 
-  if (input.agencyName || input.agencyContact) {
-    ctx.globalAlpha = reveal(local, 1.6, 0.8);
-    const cy = 548;
-    const g = ctx.createLinearGradient(470, cy, 1210, cy + 96);
-    g.addColorStop(0, "rgba(200,161,90,0.20)");
-    g.addColorStop(1, "rgba(200,161,90,0.06)");
-    ctx.fillStyle = g;
-    roundRect(ctx, 470, cy, 740, 96, 14);
+  ctx.globalAlpha = 1;
+}
+
+// How the site looks in a Google search result — used for title,
+// description and schema issues, which aren't visible on the page itself.
+function drawSerp(ctx: CanvasRenderingContext2D, input: RenderInput, x: number, y: number, w: number, h: number, local: number) {
+  const f = input.fonts;
+  const { serp } = input;
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(x, y, w, h);
+  // Search bar
+  ctx.fillStyle = "#4285f4";
+  ctx.font = `600 26px ${f.body}`;
+  ctx.fillText("Google", x + 36, y + 52);
+  ctx.strokeStyle = "#dfe1e5";
+  ctx.lineWidth = 1;
+  roundRect(ctx, x + 150, y + 26, w - 200, 40, 20);
+  ctx.stroke();
+  ctx.fillStyle = "#202124";
+  ctx.font = `400 15px ${f.body}`;
+  ctx.fillText(input.domain.replace(/\.[a-z.]+$/, ""), x + 172, y + 51);
+  ctx.fillStyle = "#e8eaed";
+  ctx.fillRect(x, y + 86, w, 1);
+
+  const rx = x + 36;
+  let ry = y + 130;
+  const maxW = w - 90;
+  // Site line
+  ctx.fillStyle = "#f1f3f4";
+  ctx.beginPath();
+  ctx.arc(rx + 13, ry - 5, 13, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#202124";
+  ctx.font = `500 14px ${f.body}`;
+  ctx.fillText(input.domain, rx + 36, ry - 10);
+  ctx.fillStyle = "#4d5156";
+  ctx.font = `400 12px ${f.body}`;
+  ctx.fillText(serp.url, rx + 36, ry + 7);
+  ry += 42;
+  // Title (Google truncates around 60 characters)
+  ctx.fillStyle = "#1a0dab";
+  ctx.font = `400 21px ${f.body}`;
+  const title = serp.title.length > 60 ? serp.title.slice(0, 57).trimEnd() + " ..." : serp.title;
+  ctx.fillText(title || "(no title)", rx, ry);
+  ry += 30;
+  // Description: what Google shows (~155 chars) vs what's cut off.
+  const shown = serp.description.slice(0, 155);
+  const cut = serp.description.slice(155);
+  ctx.font = `400 15px ${f.body}`;
+  ctx.fillStyle = "#4d5156";
+  const shownLines = wrapLines(ctx, shown ? shown.trimEnd() + (cut ? " ..." : "") : "No description — Google picks a random snippet from the page.", maxW);
+  shownLines.forEach((l, i) => ctx.fillText(l, rx, ry + i * 23));
+  ry += shownLines.length * 23;
+
+  const reveal2 = clamp((local - 1.6) / 0.8, 0, 1);
+  if (cut && reveal2 > 0) {
+    ctx.globalAlpha = reveal2;
+    ry += 22;
+    ctx.fillStyle = "#c5221f";
+    ctx.font = `700 11px ${f.body}`;
+    spaced(ctx, `CUT OFF — ${cut.length} CHARACTERS NOBODY SEES`, rx, ry, 1.6);
+    ry += 20;
+    ctx.fillStyle = "rgba(197,34,31,0.08)";
+    const cutLines = wrapLines(ctx, cut, maxW).slice(0, 4);
+    ctx.font = `400 14px ${f.body}`;
+    const cutWrapped = wrapLines(ctx, cut, maxW - 24).slice(0, 4);
+    roundRect(ctx, rx - 10, ry - 6, maxW + 20, cutWrapped.length * 21 + 16, 8);
     ctx.fill();
-    ctx.strokeStyle = "rgba(200,161,90,0.6)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = IVORY;
-    ctx.font = `600 27px ${f.display}`;
-    ctx.fillText(input.agencyName ? `Let ${input.agencyName} fix this for you` : "Let's fix this together", 500, cy + 42);
-    if (input.agencyContact) {
-      ctx.font = `500 19px ${f.body}`;
-      ctx.fillStyle = GOLD_SOFT;
-      ctx.fillText(input.agencyContact, 500, cy + 74);
-    }
+    ctx.fillStyle = "rgba(77,81,86,0.6)";
+    cutWrapped.forEach((l, i) => {
+      ctx.fillText(l, rx, ry + 14 + i * 21);
+      const lw = ctx.measureText(l).width;
+      ctx.strokeStyle = "rgba(197,34,31,0.55)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(rx, ry + 9 + i * 21);
+      ctx.lineTo(rx + lw, ry + 9 + i * 21);
+      ctx.stroke();
+    });
+    void cutLines;
+    ry += cutWrapped.length * 21 + 22;
+    ctx.globalAlpha = 1;
   }
+  if (!serp.hasSchema && reveal2 > 0) {
+    ctx.globalAlpha = reveal2;
+    ry += 14;
+    ctx.fillStyle = "#c5221f";
+    ctx.font = `700 11px ${f.body}`;
+    spaced(ctx, "NO STAR RATINGS OR PRICE — NO SCHEMA MARKUP", rx, ry, 1.6);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawCta(ctx: CanvasRenderingContext2D, input: RenderInput, scene: TimedScene, local: number, t: number) {
+  const f = input.fonts;
+  screenshotBackdrop(ctx, input.screenshot, local);
+  if (input.presenter) {
+    const pop = reveal(local, 0.1, 0.8);
+    drawPresenter(ctx, input.presenter, 300, 318, 165 * (0.92 + 0.08 * pop), t, f, { alpha: pop });
+  }
+  const x = input.presenter ? 540 : 150;
+  const w = 1180 - x;
+  ctx.globalAlpha = reveal(local, 0.3);
+  ctx.fillStyle = GOLD;
+  ctx.font = `600 15px ${f.body}`;
+  spaced(ctx, "LET'S FIX THIS", x, 140, 3.2);
+  ctx.fillStyle = IVORY;
+  ctx.font = `600 46px ${f.display}`;
+  let y = drawWrapped(ctx, scene.title, x, 200, w, 54, 2) + 14;
+  ctx.font = `400 19px ${f.body}`;
+  const points = scene.bullets?.length ? scene.bullets : input.outroPoints;
+  points.slice(0, 3).forEach((p, i) => {
+    ctx.globalAlpha = reveal(local, 0.8 + i * 0.35);
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x + 11, y + 22, 10, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x + 6, y + 22);
+    ctx.lineTo(x + 10, y + 26);
+    ctx.lineTo(x + 17, y + 18);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(250,248,243,0.9)";
+    y = drawWrapped(ctx, p, x + 34, y + 30, w - 34, 26, 2) + 8;
+  });
+
+  // Contact card
+  ctx.globalAlpha = reveal(local, 1.6, 0.8);
+  const cy = Math.max(y + 18, 430);
+  const g = ctx.createLinearGradient(x, cy, x + w, cy + 112);
+  g.addColorStop(0, "rgba(200,161,90,0.26)");
+  g.addColorStop(1, "rgba(200,161,90,0.08)");
+  ctx.fillStyle = g;
+  roundRect(ctx, x, cy, w, 112, 16);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(200,161,90,0.7)";
+  ctx.lineWidth = 1.2;
+  roundRect(ctx, x, cy, w, 112, 16);
+  ctx.stroke();
+  // "Reply now" pill on the right; name and contact kept clear of it.
+  const pulse = 0.5 + 0.5 * Math.sin(local * 3);
+  ctx.font = `700 13px ${f.body}`;
+  const label = "REPLY TO GET STARTED";
+  const pw = spacedWidth(ctx, label, 2) + 36;
+  const textW = w - pw - 80;
+  ctx.fillStyle = IVORY;
+  ctx.font = `600 28px ${f.display}`;
+  drawWrapped(ctx, input.agencyName || "Let's get started", x + 30, cy + 46, textW, 30, 1);
+  ctx.fillStyle = GOLD_SOFT;
+  ctx.font = `500 18px ${f.body}`;
+  drawWrapped(ctx, input.agencyContact || "Just reply to this message", x + 30, cy + 78, textW, 22, 2);
+  ctx.font = `700 13px ${f.body}`;
+  ctx.fillStyle = `rgba(200,161,90,${0.85 + pulse * 0.15})`;
+  roundRect(ctx, x + w - pw - 26, cy + 38, pw, 36, 18);
+  ctx.fill();
+  ctx.fillStyle = "#0b1220";
+  spaced(ctx, label, x + w - pw - 8, cy + 61, 2);
   ctx.globalAlpha = 1;
 }
 
@@ -822,7 +981,7 @@ function drawBrowserScene(
     ctx.fillStyle = "rgba(250,248,243,0.6)";
     ctx.font = `500 13px ${f.body}`;
     ctx.textAlign = "center";
-    ctx.fillText(input.domain, frameX + frameW / 2, frameY + barH / 2 + 5);
+    ctx.fillText(scene.visual === "google" ? `google.com/search?q=${input.domain.replace(/\.[a-z.]+$/, "")}` : input.domain, frameX + frameW / 2, frameY + barH / 2 + 5);
     ctx.textAlign = "left";
   } else {
     ctx.fillStyle = "rgba(250,248,243,0.2)";
@@ -835,19 +994,34 @@ function drawBrowserScene(
   ctx.clip();
   ctx.fillStyle = "#fff";
   ctx.fillRect(viewX, viewY, viewW, viewH);
-  let focusScreenY = viewY + viewH * 0.35;
-  if (img) {
-    const zoom = 1 + 0.035 * clamp(local / Math.max(scene.duration, 1), 0, 1);
+  const visual = scene.visual ?? "page";
+  // The highlighted region on screen (page/missing visuals).
+  let bandTop = viewY + viewH * 0.3;
+  let bandH = isMobileShot ? 150 : 170;
+  let showCursor = visual === "page" || visual === "missing";
+
+  if (visual === "google") {
+    drawSerp(ctx, input, viewX, viewY, viewW, viewH, local);
+    showCursor = false;
+  } else if (img) {
+    const zoom = 1 + 0.03 * clamp(local / Math.max(scene.duration, 1), 0, 1);
     const scale = (viewW / img.width) * zoom;
     const pageH = img.height * scale;
     const maxScroll = Math.max(0, pageH - viewH);
-    const target = (fc: number) => clamp(fc * pageH - viewH * 0.35, 0, maxScroll);
+    // With a span, focus is the top of the section; otherwise its centre.
+    const hasSpan = typeof scene.span === "number" && scene.span > 0;
+    const sectionTop = (sc: TimedScene | { focus: number; span?: number }) =>
+      typeof sc.span === "number" && sc.span > 0 ? sc.focus * pageH : sc.focus * pageH - (isMobileShot ? 75 : 85);
+    const sectionH = hasSpan ? clamp(scene.span! * pageH, 60, viewH - 40) : isMobileShot ? 150 : 170;
+    const target = (top: number, h: number) => clamp(top - Math.max(24, (viewH - h) * 0.3), 0, maxScroll);
+    const prevTop = prevFocus * pageH - 85;
     const move = ease(clamp(local / 1.6, 0, 1));
-    const drift = Math.min(36, maxScroll) * clamp((local - 1.6) / Math.max(scene.duration - 1.6, 1), 0, 1);
-    const scrollY = clamp(target(prevFocus) + (target(scene.focus) - target(prevFocus)) * move + drift, 0, maxScroll);
+    const scrollTarget = target(sectionTop(scene), sectionH);
+    const scrollY = clamp(target(prevTop, 170) + (scrollTarget - target(prevTop, 170)) * move, 0, maxScroll);
     const offsetX = (viewW - img.width * scale) / 2;
     ctx.drawImage(img, viewX + offsetX, viewY - scrollY, img.width * scale, pageH);
-    focusScreenY = viewY + clamp(scene.focus * pageH - scrollY, 40, viewH - 40);
+    bandTop = viewY + clamp(sectionTop(scene) - scrollY, 6, viewH - sectionH - 6);
+    bandH = sectionH;
 
     if (maxScroll > 0) {
       const barLen = Math.max(30, (viewH / pageH) * viewH);
@@ -863,36 +1037,84 @@ function drawBrowserScene(
     ctx.textAlign = "left";
   }
 
-  // Spotlight: dim everything except a band around the section being discussed.
   const spot = reveal(local, 1.5, 0.7);
-  if (spot > 0) {
-    const bandH = isMobileShot ? 150 : 190;
-    const top = clamp(focusScreenY - bandH * 0.45, viewY + 8, viewY + viewH - bandH - 8);
-    ctx.fillStyle = `rgba(7,11,20,${0.42 * spot})`;
-    ctx.fillRect(viewX, viewY, viewW, top - viewY);
-    ctx.fillRect(viewX, top + bandH, viewW, viewY + viewH - top - bandH);
+  if (visual === "page" && spot > 0) {
+    // Dim everything except the section being discussed.
+    ctx.fillStyle = `rgba(7,11,20,${0.45 * spot})`;
+    ctx.fillRect(viewX, viewY, viewW, bandTop - viewY);
+    ctx.fillRect(viewX, bandTop + bandH, viewW, viewY + viewH - bandTop - bandH);
     ctx.strokeStyle = isIssue ? `rgba(229,72,77,${0.95 * spot})` : `rgba(200,161,90,${0.95 * spot})`;
     ctx.lineWidth = 2.5;
-    ctx.setLineDash([]);
-    roundRect(ctx, viewX + 12, top, viewW - 24, bandH, 10);
+    roundRect(ctx, viewX + 10, bandTop, viewW - 20, bandH, 10);
     ctx.stroke();
     if (isIssue) {
-      // Marker tag on the band
       ctx.fillStyle = `rgba(229,72,77,${spot})`;
-      roundRect(ctx, viewX + 24, top - 13, 92, 26, 13);
+      roundRect(ctx, viewX + 24, Math.max(viewY + 4, bandTop - 13), 92, 26, 13);
       ctx.fill();
       ctx.fillStyle = "#fff";
       ctx.font = `700 12px ${f.body}`;
-      spaced(ctx, "ISSUE", viewX + 44, top + 5, 2);
+      spaced(ctx, "ISSUE", viewX + 44, Math.max(viewY + 4, bandTop - 13) + 18, 2);
     }
+  } else if (visual === "missing" && spot > 0) {
+    // Something that should exist doesn't: mark where it belongs.
+    ctx.fillStyle = `rgba(7,11,20,${0.35 * spot})`;
+    ctx.fillRect(viewX, viewY, viewW, viewH);
+    const h = 96;
+    const top = clamp(bandTop + bandH / 2 - h / 2, viewY + 20, viewY + viewH - h - 20);
+    ctx.fillStyle = `rgba(250,248,243,${0.96 * spot})`;
+    roundRect(ctx, viewX + 60, top, viewW - 120, h, 14);
+    ctx.fill();
+    ctx.setLineDash([9, 7]);
+    ctx.strokeStyle = `rgba(200,161,90,${spot})`;
+    ctx.lineWidth = 2.5;
+    roundRect(ctx, viewX + 60, top, viewW - 120, h, 14);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = spot;
+    ctx.fillStyle = "#a9833f";
+    ctx.font = `700 12px ${f.body}`;
+    spaced(ctx, "MISSING — ADD IT HERE", viewX + 88, top + 36, 2.2);
+    ctx.fillStyle = "#0b1220";
+    ctx.font = `600 22px ${f.display}`;
+    drawWrapped(ctx, scene.title, viewX + 88, top + 68, viewW - 176, 26, 1);
+    ctx.globalAlpha = 1;
+    bandTop = top;
+    bandH = h;
+  } else if (visual === "none") {
+    // Behind-the-scenes issue: nothing on the page to point at.
+    ctx.fillStyle = "rgba(7,11,20,0.62)";
+    ctx.fillRect(viewX, viewY, viewW, viewH);
+    const pop = reveal(local, 0.5, 0.7);
+    ctx.globalAlpha = pop;
+    const cw = viewW - 160;
+    const ch = 150;
+    const cx = viewX + 80;
+    const cy = viewY + viewH / 2 - ch / 2 + (1 - pop) * 16;
+    ctx.fillStyle = "rgba(11,18,32,0.94)";
+    roundRect(ctx, cx, cy, cw, ch, 16);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(200,161,90,0.5)";
+    ctx.lineWidth = 1;
+    roundRect(ctx, cx, cy, cw, ch, 16);
+    ctx.stroke();
+    ctx.fillStyle = GOLD;
+    ctx.font = `700 12px ${f.body}`;
+    spaced(ctx, "BEHIND THE SCENES", cx + 32, cy + 40, 2.4);
+    ctx.fillStyle = IVORY;
+    ctx.font = `600 24px ${f.display}`;
+    drawWrapped(ctx, scene.title, cx + 32, cy + 78, cw - 64, 30, 2);
+    ctx.fillStyle = "rgba(250,248,243,0.55)";
+    ctx.font = `400 14px ${f.body}`;
+    ctx.fillText("Not visible on the page — but it affects every visitor.", cx + 32, cy + ch - 24);
+    ctx.globalAlpha = 1;
   }
   ctx.restore();
 
-  // A guiding cursor glides in and taps the section being discussed.
+  // A guiding cursor glides in and taps the highlighted section.
   const cur = reveal(local, 0.6, 1.2);
-  if (cur > 0) {
+  if (showCursor && cur > 0) {
     const tx = viewX + viewW * 0.62;
-    const ty = focusScreenY + 10;
+    const ty = bandTop + Math.min(bandH / 2, 60);
     const sx = viewX + viewW + 40;
     const sy = viewY + viewH + 20;
     const cxp = sx + (tx - sx) * cur;
@@ -969,7 +1191,7 @@ function drawBrowserScene(
     ctx.fillRect(-3.5, -3.5, 7, 7);
     ctx.restore();
     ctx.fillStyle = "rgba(250,248,243,0.86)";
-    y = drawWrapped(ctx, b, panelX + 24, y, panelW - 24, 29, 3) + 16;
+    y = drawWrapped(ctx, b, panelX + 24, y, panelW - 24, 29, 2) + 16;
   });
   ctx.globalAlpha = 1;
 
@@ -982,7 +1204,7 @@ function drawBrowserScene(
   }
 }
 
-function drawScene(ctx: CanvasRenderingContext2D, input: RenderInput, idx: number, local: number) {
+function drawScene(ctx: CanvasRenderingContext2D, input: RenderInput, idx: number, local: number, t: number = local) {
   const { scenes } = input;
   const scene = scenes[idx];
   const prevFocus = idx > 0 ? scenes[idx - 1].focus : 0;
@@ -1007,6 +1229,9 @@ function drawScene(ctx: CanvasRenderingContext2D, input: RenderInput, idx: numbe
     case "proof":
       drawProof(ctx, input, scene, local);
       break;
+    case "cta":
+      drawCta(ctx, input, scene, local, t);
+      break;
     default: {
       const body = scenes.filter((s) => s.kind === "walkthrough" || s.kind === "issue");
       drawBrowserScene(ctx, input, scene, body.indexOf(scene) + 1, body.length, prevFocus, local);
@@ -1028,7 +1253,8 @@ function drawScene(ctx: CanvasRenderingContext2D, input: RenderInput, idx: numbe
 // The previous scene's final frame, cached for crossfades.
 let fadeCache: { key: string; canvas: HTMLCanvasElement } | null = null;
 
-const CROSSFADE = 0.6;
+const FADE_OUT = 0.25;
+const FADE_IN = 0.35;
 
 export function renderFrame(ctx: CanvasRenderingContext2D, input: RenderInput, t: number) {
   const { scenes } = input;
@@ -1042,9 +1268,11 @@ export function renderFrame(ctx: CanvasRenderingContext2D, input: RenderInput, t
   }
   const local = t - scene.start;
 
-  drawScene(ctx, input, idx, local);
+  drawScene(ctx, input, idx, local, t);
 
-  if (idx > 0 && local < CROSSFADE && typeof document !== "undefined") {
+  // Scene change: the previous scene fades to ink, then the new one fades
+  // up — never two scenes' text on screen at once.
+  if (idx > 0 && local < FADE_OUT && typeof document !== "undefined") {
     const prev = scenes[idx - 1];
     const key = `${idx}|${prev.start}|${prev.duration}|${prev.title}|${input.agencyName}`;
     if (!fadeCache || fadeCache.key !== key) {
@@ -1052,15 +1280,22 @@ export function renderFrame(ctx: CanvasRenderingContext2D, input: RenderInput, t
       off.width = VIDEO_W;
       off.height = VIDEO_H;
       const octx = off.getContext("2d")!;
-      drawScene(octx, input, idx - 1, prev.duration - 0.01);
+      drawScene(octx, input, idx - 1, prev.duration - 0.01, prev.start + prev.duration - 0.01);
       fadeCache = { key, canvas: off };
     }
-    ctx.globalAlpha = 1 - easeOut(local / CROSSFADE);
     ctx.drawImage(fadeCache.canvas, 0, 0);
-    ctx.globalAlpha = 1;
-  } else if (idx === 0 && local < 0.6) {
-    ctx.fillStyle = `rgba(11,18,32,${1 - easeOut(local / 0.6)})`;
+    ctx.fillStyle = `rgba(11,18,32,${easeOut(local / FADE_OUT)})`;
     ctx.fillRect(0, 0, VIDEO_W, VIDEO_H);
+  } else {
+    const since = idx > 0 ? local - FADE_OUT : local;
+    if (since < FADE_IN) {
+      ctx.fillStyle = `rgba(11,18,32,${1 - easeOut(Math.max(0, since) / FADE_IN)})`;
+      ctx.fillRect(0, 0, VIDEO_W, VIDEO_H);
+    }
+  }
+
+  if (input.presenter && scene.kind !== "cta") {
+    drawPresenter(ctx, input.presenter, 1186, 606, 56, t, input.fonts, { alpha: clamp(t / 0.8, 0, 1) });
   }
 
   subtitles(ctx, input.fonts, scene, local);

@@ -43,6 +43,7 @@ export type SiteContent = {
   hasUrgency: boolean;
   hasPaymentBadges: boolean;
   price: string | null;
+  metaDescription: string | null;
 };
 
 export type FunnelStageId = "tof" | "mof" | "bof";
@@ -70,7 +71,14 @@ export type AiSummary = {
   socialProof: { verdict: string; recommendations: string[] };
 };
 
-export type VideoSceneKind = "intro" | "mobile" | "headline" | "funnel" | "proof" | "walkthrough" | "issue" | "outro";
+export type VideoSceneKind = "intro" | "mobile" | "headline" | "funnel" | "proof" | "walkthrough" | "issue" | "outro" | "cta";
+
+// How a walkthrough/issue scene illustrates its point:
+// page    — spotlight a real, visible part of the page (at focus, `span` tall)
+// missing — mark where something that doesn't exist yet should go
+// google  — show how the site appears in a Google search result
+// none    — a behind-the-scenes issue with nothing to point at on the page
+export type SceneVisual = "page" | "missing" | "google" | "none";
 
 export type VideoScene = {
   kind: VideoSceneKind;
@@ -84,6 +92,9 @@ export type VideoScene = {
   rewrite?: string;
   // "proof" scenes: a real testimonial from the page, if any.
   quote?: string;
+  visual?: SceneVisual;
+  // Height of the highlighted section as a fraction of the full page.
+  span?: number;
 };
 
 export type AuditReport = {

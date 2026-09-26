@@ -5,7 +5,8 @@ import { voiceMix, type VoiceSettings } from "./voices";
 // served from the browser cache on later visits.
 
 // When each sentence is spoken, in seconds from the start of the clip.
-export type SpeechSegment = { text: string; start: number; end: number };
+export type SpeechWord = { text: string; start: number; end: number };
+export type SpeechSegment = { text: string; start: number; end: number; words?: SpeechWord[] };
 export type Speech = { samples: Float32Array<ArrayBuffer>; segments: SpeechSegment[] };
 
 type Pending = { resolve: (s: Speech) => void; reject: (e: Error) => void };

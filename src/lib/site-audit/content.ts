@@ -133,7 +133,11 @@ export function extractContent(html: string, finalUrl: string): SiteContent {
     .map((m) => ({ text: m[0].trim(), value: Number(m[0].replace(/[^\d.]/g, "")) }))
     .filter((p) => p.value > 0);
   const price = prices.length ? prices.reduce((a, b) => (b.value < a.value ? b : a)).text : null;
+  const metaDescription =
+    findTags(html, "meta").find((t) => (t.attrs.name || "").toLowerCase() === "description")?.attrs.content;
+  const metaDescriptionText = metaDescription ? stripTags(metaDescription) || null : null;
   return {
+    metaDescription: metaDescriptionText,
     siteType,
     proofSection,
     hasFaq: pages.faq,

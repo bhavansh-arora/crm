@@ -7,7 +7,8 @@ import { BODY_FONT, DISPLAY_FONT } from "./fonts";
 import { renderAmbientMusic } from "./music";
 import { estimateDuration, renderFrame, VIDEO_H, VIDEO_W, type RenderInput, type TimedScene } from "./video-renderer";
 import { loadVoiceEngine, synthesize, VOICE_SAMPLE_RATE, type SpeechSegment } from "./voice-engine";
-import { DEFAULT_VOICE_SETTINGS, VOICES, type VoiceSettings } from "./voices";
+import { ENVELOPE_RATE, loudnessEnvelope, type Presenter } from "./presenter";
+import { DEFAULT_VOICE_SETTINGS, voicePreset, VOICES, type VoiceSettings } from "./voices";
 
 type Mode = "idle" | "preview" | "recording";
 type VoiceStatus =
@@ -42,7 +43,19 @@ const settingsKey = (s: VoiceSettings) => `${s.voice}|${s.accent.toFixed(2)}|${s
 const SPEECH_LEAD = 0.55;
 const SPEECH_TAIL = 0.6;
 
-type Narration = { buffer: AudioBuffer; segments: SpeechSegment[] };
+type Narration = { buffer: AudioBuffer; segments: SpeechSegment[]; envelope: Float32Array };
+
+// Closing call-to-action, added after the report's own scenes.
+function ctaScene(agencyName: string, points: string[]): VideoScene {
+  const who = agencyName.trim() || "Our team";
+  return {
+    kind: "cta",
+    title: "We can fix all of this for you",
+    narration: `Here's the good part. ${who} can fix every one of these for you, quickly and properly. Just reply to this message, or use the details on screen, and let's get your website working as hard as you do.`,
+    focus: 0,
+    bullets: points.slice(0, 3),
+  };
+}
 
 function Slider({ label, value, min, max, step, left, right, onChange }: {
   label: string; value: number; min: number; max: number; step: number; left: string; right: string; onChange: (v: number) => void;
@@ -66,6 +79,10 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   const [mobileImage, setMobileImage] = useState<HTMLImageElement | null>(null);
   const [fontsReady, setFontsReady] = useState(0);
   const [agencyName, setAgencyName] = useState("");
+  const [presenterName, setPresenterName] = useState("");
+  const [presenterPhoto, setPresenterPhoto] = useState<HTMLImageElement | null>(null);
+  const [showPresenter, setShowPresenter] = useState(true);
+  const [includeCta, setIncludeCta] = useState(true);
   const [agencyContact, setAgencyContact] = useState("");
   const [voice, setVoice] = useState<VoiceSettings>(DEFAULT_VOICE_SETTINGS);
   const [includeVoice, setIncludeVoice] = useState(true);
@@ -88,6 +105,15 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
 
   useEffect(() => {
     setAgencyName(loadPref("audit.agencyName", ""));
+    setPresenterName(loadPref("audit.presenterName", ""));
+    setShowPresenter(loadPref("audit.showPresenter", true));
+    setIncludeCta(loadPref("audit.includeCta", true));
+    const photo = loadPref<string>("audit.presenterPhoto", "");
+    if (photo) {
+      const img = new Image();
+      img.onload = () => setPresenterPhoto(img);
+      img.src = photo;
+    }
     setAgencyContact(loadPref("audit.agencyContact", ""));
     // Merge so settings saved before a new option existed pick up its default.
     // Settings saved for a voice that no longer exists fall back to the defaults.
@@ -119,41 +145,70 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     load(report.mobileScreenshot, setMobileImage);
   }, [report]);
 
+  const outroPoints = useMemo(
+    () =>
+      report.ai?.quickWins ??
+      report.categories
+        .flatMap((c) => c.checks)
+        .filter((c) => c.status === "fail" && c.fix)
+        .slice(0, 4)
+        .map((c) => c.fix!),
+    [report]
+  );
+  const videoScenes = useMemo(
+    () => (includeCta ? [...scenes, ctaScene(agencyName, outroPoints)] : scenes),
+    [scenes, includeCta, agencyName, outroPoints]
+  );
+
   const vKey = settingsKey(voice);
   const bufferFor = (s: VideoScene) => voiceBuffers.get(`${vKey}|${s.narration}`) ?? null;
-  const voiceReady = scenes.every((s) => bufferFor(s));
+  const voiceReady = videoScenes.every((s) => bufferFor(s));
 
   const timed: TimedScene[] = useMemo(() => {
     let start = 0;
-    return scenes.map((s) => {
+    return videoScenes.map((s) => {
       const n = includeVoice ? voiceBuffers.get(`${vKey}|${s.narration}`) : undefined;
       const duration = n ? SPEECH_LEAD + n.buffer.duration + SPEECH_TAIL : estimateDuration(s.narration);
       const t: TimedScene = { ...s, start, duration, speech: n ? { lead: SPEECH_LEAD, segments: n.segments } : undefined };
       start += duration;
       return t;
     });
-  }, [scenes, voiceBuffers, vKey, includeVoice]);
+  }, [videoScenes, voiceBuffers, vKey, includeVoice]);
   const total = timed.length ? timed[timed.length - 1].start + timed[timed.length - 1].duration : 0;
 
+  // Narration loudness over the whole timeline, for the presenter's lip-sync.
+  function levelFn(sceneList: (TimedScene & { envelope?: Float32Array })[]) {
+    return (t: number) => {
+      const sc = sceneList.find((x) => t >= x.start && t < x.start + x.duration);
+      const env = sc?.envelope;
+      if (!sc || !env) return 0;
+      const i = Math.floor((t - sc.start - SPEECH_LEAD) * ENVELOPE_RATE);
+      return i >= 0 && i < env.length ? env[i] : 0;
+    };
+  }
+
   const renderInput: RenderInput = useMemo(() => {
-    const outroPoints =
-      report.ai?.quickWins ??
-      report.categories
-        .flatMap((c) => c.checks)
-        .filter((c) => c.status === "fail" && c.fix)
-        .slice(0, 4)
-        .map((c) => c.fix!);
     const content = report.content;
     const ai = report.ai;
     const leak = ai?.funnel.biggestLeak ?? [...report.funnel].sort((a, b) => a.score - b.score)[0].id;
     const funnelLine = (id: "tof" | "mof" | "bof") => {
-      if (ai) return ai.funnel[id];
+      // Just the first sentence on screen — the full diagnosis is in the report.
+      if (ai) return ai.funnel[id].match(/^.*?[.!?](\s|$)/)?.[0].trim() ?? ai.funnel[id];
       const stage = report.funnel.find((f) => f.id === id)!;
       const gaps = stage.items.filter((i) => i.status === "no").map((i) => i.label.toLowerCase());
       return gaps.length ? `Missing: ${gaps.slice(0, 3).join(", ")}.` : "In good shape.";
     };
     return {
       scenes: timed,
+      presenter: showPresenter
+        ? ({
+            style: voicePreset(voice.voice).gender,
+            name: presenterName.trim() || voicePreset(voice.voice).name,
+            caption: agencyName.trim(),
+            photo: presenterPhoto,
+            levelAt: () => 0,
+          } satisfies Presenter)
+        : null,
       screenshot: image,
       mobileShot: mobileImage,
       mobileChecklist: mobileChecklist(report),
@@ -164,6 +219,12 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
       },
       funnel: report.funnel.map((f) => ({ id: f.id, name: f.name, goal: f.goal, score: f.score, line: funnelLine(f.id) })),
       biggestLeak: leak,
+      serp: {
+        title: report.pageTitle ?? "",
+        description: content.metaDescription ?? "",
+        url: report.finalUrl.replace(/^https?:\/\//, "").replace(/\/$/, ""),
+        hasSchema: report.categories.flatMap((c) => c.checks).some((k) => k.id === "structured-data" && k.status === "pass"),
+      },
       proof: {
         quotes: content.testimonials,
         trust: content.trustSignals,
@@ -182,7 +243,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
       outroPoints,
       fonts,
     };
-  }, [timed, image, mobileImage, report, agencyName, agencyContact, fonts]);
+  }, [timed, image, mobileImage, report, agencyName, agencyContact, fonts, outroPoints, showPresenter, presenterName, presenterPhoto, voice.voice]);
 
   useEffect(() => {
     if (mode !== "idle") return;
@@ -231,6 +292,29 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     return buf;
   }
 
+  function onPhoto(file: File | undefined) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = new Image();
+      src.onload = () => {
+        // Shrink so it's light to store and draw.
+        const scale = Math.min(1, 360 / Math.min(src.width, src.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(src.width * scale);
+        c.height = Math.round(src.height * scale);
+        c.getContext("2d")!.drawImage(src, 0, 0, c.width, c.height);
+        const url = c.toDataURL("image/jpeg", 0.85);
+        const img = new Image();
+        img.onload = () => setPresenterPhoto(img);
+        img.src = url;
+        savePref("audit.presenterPhoto", url);
+      };
+      src.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  }
+
   function updateVoice(patch: Partial<VoiceSettings>) {
     const next = { ...voice, ...patch };
     setVoice(next);
@@ -271,14 +355,15 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     try {
       await ensureEngine();
       const next = new Map(voiceBuffers);
-      const todo = scenes.filter((s) => !next.has(`${vKey}|${s.narration}`));
-      let done = scenes.length - todo.length;
-      setVoiceStatus({ state: "generating", done, total: scenes.length });
+      const todo = videoScenes.filter((s) => !next.has(`${vKey}|${s.narration}`));
+      let done = videoScenes.length - todo.length;
+      setVoiceStatus({ state: "generating", done, total: videoScenes.length });
       for (const s of todo) {
         const speech = await synthesize(s.narration, voice);
-        next.set(`${vKey}|${s.narration}`, { buffer: toAudioBuffer(speech.samples), segments: speech.segments });
+        const buffer = toAudioBuffer(speech.samples);
+        next.set(`${vKey}|${s.narration}`, { buffer, segments: speech.segments, envelope: loudnessEnvelope(buffer) });
         done++;
-        setVoiceStatus({ state: "generating", done, total: scenes.length });
+        setVoiceStatus({ state: "generating", done, total: videoScenes.length });
       }
       setVoiceBuffers(next);
       setVoiceStatus({ state: "idle" });
@@ -315,15 +400,19 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
 
     // Recompute timing with the freshest buffers.
     let start = 0;
-    const sceneTimes = scenes.map((s) => {
+    const sceneTimes = videoScenes.map((s) => {
       const n = includeVoice ? buffers.get(`${vKey}|${s.narration}`) : undefined;
       const duration = n ? SPEECH_LEAD + n.buffer.duration + SPEECH_TAIL : estimateDuration(s.narration);
-      const t = { ...s, start, duration, buf: n?.buffer, speech: n ? { lead: SPEECH_LEAD, segments: n.segments } : undefined };
+      const t = { ...s, start, duration, buf: n?.buffer, envelope: n?.envelope, speech: n ? { lead: SPEECH_LEAD, segments: n.segments } : undefined };
       start += duration;
       return t;
     });
     const runTotal = start;
-    const input: RenderInput = { ...renderInput, scenes: sceneTimes };
+    const input: RenderInput = {
+      ...renderInput,
+      scenes: sceneTimes,
+      presenter: renderInput.presenter ? { ...renderInput.presenter, levelAt: levelFn(sceneTimes) } : null,
+    };
     const haveVoice = includeVoice && sceneTimes.every((s) => s.buf);
 
     const canvas = canvasRef.current;
@@ -447,7 +536,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
           <h2 className="mt-1 font-display text-2xl font-semibold">Narrated video review</h2>
         </div>
         <div className="text-xs text-ivory/50">
-          {scenes.length} scenes · {Math.round(total)}s · script {report.ai ? "written by AI from the live site" : "from template"}
+          {videoScenes.length} scenes · {Math.round(total)}s · script {report.ai ? "written by AI from the live site" : "from template"}
         </div>
       </div>
 
@@ -579,6 +668,68 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
                 className="h-4 w-4 accent-gold-500"
               />
             </label>
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-ivory/80">Closing call-to-action</span>
+              <input
+                type="checkbox"
+                checked={includeCta}
+                onChange={(e) => {
+                  setIncludeCta(e.target.checked);
+                  savePref("audit.includeCta", e.target.checked);
+                }}
+                className="h-4 w-4 accent-gold-500"
+              />
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            <label className="flex items-center justify-between gap-3">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ivory/50">On-screen presenter</span>
+              <input
+                type="checkbox"
+                checked={showPresenter}
+                onChange={(e) => {
+                  setShowPresenter(e.target.checked);
+                  savePref("audit.showPresenter", e.target.checked);
+                }}
+                className="h-4 w-4 accent-gold-500"
+              />
+            </label>
+            {showPresenter && (
+              <>
+                <input
+                  value={presenterName}
+                  onChange={(e) => {
+                    setPresenterName(e.target.value);
+                    savePref("audit.presenterName", e.target.value);
+                  }}
+                  placeholder={`Presenter name (default: ${voicePreset(voice.voice).name})`}
+                  className="w-full rounded-lg bg-ink-900 px-3 py-2 text-sm text-ivory ring-1 ring-white/10 placeholder:text-ivory/30 focus:ring-gold-500/60"
+                />
+                <div className="flex items-center gap-2 text-xs">
+                  <label className="cursor-pointer rounded-full px-3 py-1.5 text-ivory/80 ring-1 ring-white/15 hover:bg-white/5">
+                    {presenterPhoto ? "Change photo" : "Use your photo"}
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => onPhoto(e.target.files?.[0])} />
+                  </label>
+                  {presenterPhoto && (
+                    <button
+                      onClick={() => {
+                        setPresenterPhoto(null);
+                        savePref("audit.presenterPhoto", "");
+                      }}
+                      className="text-ivory/50 hover:text-ivory"
+                    >
+                      Use illustrated presenter
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] leading-snug text-ivory/40">
+                  {presenterPhoto
+                    ? "Your photo appears with a glow that pulses as the narrator speaks."
+                    : "The illustrated presenter lip-syncs to the narration and matches the chosen voice."}
+                </p>
+              </>
+            )}
           </div>
 
           <div className="space-y-2">
