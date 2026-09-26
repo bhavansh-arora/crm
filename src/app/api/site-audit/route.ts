@@ -4,7 +4,7 @@ import { requireSession, handleApiError, ApiError } from "@/lib/api-auth";
 import { runAudit } from "@/lib/site-audit";
 import { FetchBlockedError, normalizeInputUrl } from "@/lib/site-audit/safe-fetch";
 
-// Fetching the site, Google PageSpeed and the AI write-up together can take
+// Fetching the site, the screenshot and the AI write-up together can take
 // a minute or two.
 export const maxDuration = 300;
 

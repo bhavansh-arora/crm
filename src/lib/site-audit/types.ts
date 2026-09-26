@@ -22,15 +22,6 @@ export type AuditCategory = {
   checks: AuditCheck[];
 };
 
-export type PageSpeedResult = {
-  strategy: "mobile" | "desktop";
-  performance: number | null;
-  accessibility: number | null;
-  bestPractices: number | null;
-  seo: number | null;
-  metrics: { label: string; value: string; rating: "good" | "average" | "poor" }[];
-};
-
 export type AiSummary = {
   headline: string;
   executiveSummary: string;
@@ -59,9 +50,8 @@ export type AuditReport = {
   overallScore: number;
   grade: "A" | "B" | "C" | "D" | "F";
   categories: AuditCategory[];
-  pageSpeed: PageSpeedResult | null;
   screenshot: string | null; // data: URL of the full-page screenshot
-  screenshotSource: "pagespeed" | "thum.io" | null;
+  screenshotSource: "thum.io" | null;
   ai: AiSummary | null;
   aiError: string | null;
   videoScript: VideoScene[];

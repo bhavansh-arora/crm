@@ -1,6 +1,6 @@
 import { analyzeSite } from "./analyze";
 import { generateAiReport } from "./ai";
-import { fetchThumScreenshot, runPageSpeed } from "./pagespeed";
+import { fetchThumScreenshot } from "./screenshot";
 import type { AuditCategory, AuditCheck, AuditReport, VideoScene } from "./types";
 
 const CATEGORY_WEIGHTS: Record<string, number> = {
@@ -70,38 +70,11 @@ export async function runAudit(url: string): Promise<AuditReport> {
   const analysis = await analyzeSite(url);
   const target = analysis.finalUrl;
 
-  const [psi, thum] = await Promise.all([runPageSpeed(target, "mobile"), fetchThumScreenshot(target)]);
-  const pageSpeed = "result" in psi ? psi.result : null;
-  if ("error" in psi) warnings.push(psi.error);
-
-  // Prefer the wide desktop capture for the video; fall back to Lighthouse's
-  // mobile full-page capture.
-  let screenshot: string | null = thum;
-  let screenshotSource: AuditReport["screenshotSource"] = thum ? "thum.io" : null;
-  if (!screenshot && "result" in psi && psi.screenshot) {
-    screenshot = psi.screenshot;
-    screenshotSource = "pagespeed";
-  }
+  const screenshot = await fetchThumScreenshot(target);
+  const screenshotSource: AuditReport["screenshotSource"] = screenshot ? "thum.io" : null;
   if (!screenshot) warnings.push("Couldn't capture a screenshot of the site — the video will use title cards only.");
 
   const categories = analysis.categories;
-  if (pageSpeed?.performance != null) {
-    // Blend real Lighthouse lab data into our heuristic speed score.
-    const perf = categories.find((c) => c.id === "performance")!;
-    perf.checks.unshift({
-      id: "lighthouse",
-      title: "Google Lighthouse speed score (mobile)",
-      status: pageSpeed.performance >= 90 ? "pass" : pageSpeed.performance >= 50 ? "warn" : "fail",
-      severity: "critical",
-      detail: `Google scores this site's mobile speed ${pageSpeed.performance}/100.`,
-      ...(pageSpeed.performance < 90 && {
-        impact: "Slow mobile sites lose visitors and rank lower on Google.",
-        fix: "Compress images, remove unused scripts/plugins, and use caching + a CDN.",
-      }),
-    });
-    perf.score = Math.round(perf.score * 0.4 + pageSpeed.performance * 0.6);
-  }
-
   let weighted = 0;
   let totalWeight = 0;
   for (const c of categories) {
@@ -123,7 +96,6 @@ export async function runAudit(url: string): Promise<AuditReport> {
         pageTitle: analysis.pageTitle,
         overallScore,
         categories,
-        pageSpeed,
         screenshot,
         textExcerpt: analysis.textExcerpt,
       });
@@ -144,7 +116,6 @@ export async function runAudit(url: string): Promise<AuditReport> {
     responseTimeMs: analysis.responseTimeMs,
     pageTitle: analysis.pageTitle,
     ...base,
-    pageSpeed,
     screenshot,
     screenshotSource,
     ai,

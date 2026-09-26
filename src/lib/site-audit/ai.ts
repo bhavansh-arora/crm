@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod/v4";
-import type { AiSummary, AuditCategory, PageSpeedResult, VideoScene } from "./types";
+import type { AiSummary, AuditCategory, VideoScene } from "./types";
 
 // Claude reviews the automated findings *and* looks at the full-page
 // screenshot, then writes (1) a plain-English report for the business owner
@@ -33,18 +33,13 @@ Write for a non-technical small-business owner: concrete, plain English, no jarg
 
 For the video script: narrate a guided tour that scrolls down the actual page from top to bottom, pointing at real sections you can see in the screenshot (header, hero, services, footer, etc.) and calling out the problems as you reach them. The "focus" value must correspond to where that section really sits in the screenshot. The audience is Indian small-business owners and the narration is read by an Indian English voice: write in natural Indian English, use ₹ for any money, avoid American idioms and slang, and keep the tone warm, respectful and professional — like a trusted consultant, never salesy. Spoken narration should read smoothly aloud: short sentences, no bullet symbols, no URLs beyond the bare domain, no abbreviations the listener wouldn't say out loud.`;
 
-function formatFindings(categories: AuditCategory[], pageSpeed: PageSpeedResult | null): string {
+function formatFindings(categories: AuditCategory[]): string {
   const lines: string[] = [];
   for (const cat of categories) {
     lines.push(`\n## ${cat.name} — ${cat.score}/100`);
     for (const c of cat.checks) {
       lines.push(`- [${c.status.toUpperCase()}${c.status === "pass" || c.status === "info" ? "" : ", " + c.severity}] ${c.title}: ${c.detail}`);
     }
-  }
-  if (pageSpeed) {
-    lines.push(`\n## Google Lighthouse (${pageSpeed.strategy})`);
-    lines.push(`Performance ${pageSpeed.performance ?? "n/a"}, Accessibility ${pageSpeed.accessibility ?? "n/a"}, Best practices ${pageSpeed.bestPractices ?? "n/a"}, SEO ${pageSpeed.seo ?? "n/a"}`);
-    for (const m of pageSpeed.metrics) lines.push(`- ${m.label}: ${m.value} (${m.rating})`);
   }
   return lines.join("\n");
 }
@@ -62,7 +57,6 @@ export async function generateAiReport(input: {
   pageTitle: string | null;
   overallScore: number;
   categories: AuditCategory[];
-  pageSpeed: PageSpeedResult | null;
   screenshot: string | null;
   textExcerpt: string;
 }): Promise<{ summary: AiSummary; scenes: VideoScene[] }> {
@@ -81,7 +75,7 @@ Page title: ${input.pageTitle ?? "(none)"}
 Overall automated score: ${input.overallScore}/100
 ${image ? "" : "\n(No screenshot available — base design comments only on the findings and text, and space scene focus values evenly.)\n"}
 # Automated findings
-${formatFindings(input.categories, input.pageSpeed)}
+${formatFindings(input.categories)}
 
 # Visible text on the page (excerpt)
 ${input.textExcerpt}

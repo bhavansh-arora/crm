@@ -67,7 +67,7 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
 - **Website audit + AI walkthrough video**: the Site Audit page (also a
   "🔍 Audit site" link next to any lead's website) takes a URL and produces
   a scored report (0-100, grade A-F) of what's wrong with the site, across
-  security/HTTPS, speed (plus Google Lighthouse scores), Google/SEO
+  security/HTTPS, loading speed, Google/SEO
   visibility, mobile experience, accessibility, lead capture (call button,
   enquiry form, WhatsApp, CTAs, reviews, analytics) and outdated code
   (obsolete tags, old copyright year, broken links, old jQuery/WordPress).
@@ -82,7 +82,7 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   (see "Narration voice" below), then exported as MP4/WebM to send to the
   prospect.
   Also: save the report as PDF, or copy a ready-made WhatsApp summary. See
-  "Website audit (optional keys)" below.
+  "Website audit (optional key)" below.
 - **One-touch calling**: a Call button on every lead dials out via the
   device's phone app (`tel:` link — works great on mobile, needs a
   softphone on desktop). A dedicated Dialer page turns this into a queue:
@@ -258,16 +258,15 @@ result and an error saying it isn't set up).
 
 Redeploy/restart after setting these.
 
-## Website audit (optional keys)
+## Website audit (optional key)
 
 The Site Audit page works with no configuration: it fetches the site, runs
 ~50 checks and captures a full-page screenshot (via thum.io's free tier).
-Two optional keys make it better:
+One optional key makes it better:
 
 | Env var | What it adds |
 | --- | --- |
 | `ANTHROPIC_API_KEY` | AI-written report (summary, top problems, design review from the screenshot, pitch) and a video script tailored to the actual page. Without it the video uses a template script built from the top findings. |
-| `PAGESPEED_API_KEY` | Google Lighthouse mobile scores and Core Web Vitals. Free: Google Cloud Console → enable "PageSpeed Insights API" → Credentials → API key. Without it Google usually rate-limits the request and those scores are skipped. |
 
 Notes:
 - An audit takes 30-90 seconds. On Vercel the route asks for up to 300s

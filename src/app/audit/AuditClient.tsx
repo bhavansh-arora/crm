@@ -9,7 +9,7 @@ import VideoStudio from "./VideoStudio";
 const STEPS = [
   "Opening the website",
   "Inspecting security & HTTPS",
-  "Measuring speed with Google Lighthouse",
+  "Measuring loading speed",
   "Reviewing Google / SEO setup",
   "Testing the mobile experience",
   "Capturing the full page",
@@ -37,7 +37,7 @@ function Icon({ id, className = "h-5 w-5" }: { id: CategoryId; className?: strin
 
 const CATEGORY_BLURB: Record<CategoryId, string> = {
   security: "HTTPS, padlock, protection headers",
-  performance: "Load time, page weight, Lighthouse",
+  performance: "Load time, page weight, compression",
   seo: "Titles, descriptions, sitemap, schema",
   mobile: "Responsive layout, tap-to-call",
   accessibility: "Alt text, labels, readable links",
@@ -474,35 +474,6 @@ export default function AuditClient({ initialUrl }: { initialUrl: string }) {
                 {report.ai.pitch}
               </blockquote>
             </>
-          )}
-
-          {report.pageSpeed && (
-            <Card>
-              <SectionHeading n={nextSection()} title="Google Lighthouse" kicker="Mobile · lab data" />
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                {([
-                  ["Performance", report.pageSpeed.performance],
-                  ["Accessibility", report.pageSpeed.accessibility],
-                  ["Best practices", report.pageSpeed.bestPractices],
-                  ["SEO", report.pageSpeed.seo],
-                ] as const).map(([label, v]) => (
-                  <div key={label} className="rounded-xl bg-slate-50 p-5 text-center">
-                    <div className={`font-display text-4xl font-semibold ${v == null ? "text-slate-300" : tone(v).text}`}>{v ?? "–"}</div>
-                    <div className="mt-1 text-[11px] uppercase tracking-[0.14em] text-slate-500">{label}</div>
-                  </div>
-                ))}
-              </div>
-              {report.pageSpeed.metrics.length > 0 && (
-                <dl className="mt-6 divide-y divide-slate-100 border-y border-slate-100">
-                  {report.pageSpeed.metrics.map((m) => (
-                    <div key={m.label} className="flex justify-between gap-4 py-2.5 text-sm">
-                      <dt className="text-slate-600">{m.label}</dt>
-                      <dd className={`font-semibold ${m.rating === "good" ? "text-emerald-700" : m.rating === "average" ? "text-amber-700" : "text-rose-700"}`}>{m.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-            </Card>
           )}
 
           <div>
