@@ -94,8 +94,10 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   the page that spotlights only the exact section being discussed (things
   that aren't visible on the page — like the Google description — are shown
   as a mock Google result, missing sections as an "add it here" marker);
-  an on-screen presenter who lip-syncs to the narration (an illustrated
-  narrator matching the chosen voice, or the rep's own uploaded photo);
+  an on-screen presenter — the rep's own uploaded photo, which lip-syncs to
+  the narration (the face is located in the browser with Google's
+  open-source MediaPipe Face Landmarker, then the jaw and lips are warped
+  in time with the voice);
   word-by-word captions timed to the voice; clean fade transitions; a soft
   synthesised music bed; and a closing call-to-action scene with your
   agency's name and contact details — narrated by our own Indian English voice

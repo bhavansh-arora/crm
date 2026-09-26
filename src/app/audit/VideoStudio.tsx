@@ -7,6 +7,7 @@ import { BODY_FONT, DISPLAY_FONT } from "./fonts";
 import { renderAmbientMusic } from "./music";
 import { estimateDuration, renderFrame, VIDEO_H, VIDEO_W, type RenderInput, type TimedScene } from "./video-renderer";
 import { loadVoiceEngine, synthesize, VOICE_SAMPLE_RATE, type SpeechSegment } from "./voice-engine";
+import { detectFace, type FaceGeometry } from "./face-landmarks";
 import { ENVELOPE_RATE, loudnessEnvelope, type Presenter } from "./presenter";
 import { DEFAULT_VOICE_SETTINGS, voicePreset, VOICES, type VoiceSettings } from "./voices";
 
@@ -80,7 +81,8 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   const [fontsReady, setFontsReady] = useState(0);
   const [agencyName, setAgencyName] = useState("");
   const [presenterName, setPresenterName] = useState("");
-  const [presenterPhoto, setPresenterPhoto] = useState<HTMLImageElement | null>(null);
+  const [presenterPhoto, setPresenterPhoto] = useState<{ img: HTMLImageElement; face: FaceGeometry } | null>(null);
+  const [photoStatus, setPhotoStatus] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   const [showPresenter, setShowPresenter] = useState(true);
   const [includeCta, setIncludeCta] = useState(true);
   const [agencyContact, setAgencyContact] = useState("");
@@ -109,9 +111,10 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     setShowPresenter(loadPref("audit.showPresenter", true));
     setIncludeCta(loadPref("audit.includeCta", true));
     const photo = loadPref<string>("audit.presenterPhoto", "");
-    if (photo) {
+    const face = loadPref<FaceGeometry | null>("audit.presenterFace", null);
+    if (photo && face) {
       const img = new Image();
-      img.onload = () => setPresenterPhoto(img);
+      img.onload = () => setPresenterPhoto({ img, face });
       img.src = photo;
     }
     setAgencyContact(loadPref("audit.agencyContact", ""));
@@ -200,15 +203,16 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     };
     return {
       scenes: timed,
-      presenter: showPresenter
-        ? ({
-            style: voicePreset(voice.voice).gender,
-            name: presenterName.trim() || voicePreset(voice.voice).name,
-            caption: agencyName.trim(),
-            photo: presenterPhoto,
-            levelAt: () => 0,
-          } satisfies Presenter)
-        : null,
+      presenter:
+        showPresenter && presenterPhoto
+          ? ({
+              name: presenterName.trim() || voicePreset(voice.voice).name,
+              caption: agencyName.trim(),
+              photo: presenterPhoto.img,
+              face: presenterPhoto.face,
+              levelAt: () => 0,
+            } satisfies Presenter)
+          : null,
       screenshot: image,
       mobileShot: mobileImage,
       mobileChecklist: mobileChecklist(report),
@@ -292,23 +296,39 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     return buf;
   }
 
+  // A real photo becomes the presenter: we find the face (lips, jaw, eyes)
+  // once, so it can lip-sync to the narration.
   function onPhoto(file: File | undefined) {
     if (!file) return;
+    setPhotoStatus({ busy: true, error: null });
     const reader = new FileReader();
     reader.onload = () => {
       const src = new Image();
-      src.onload = () => {
-        // Shrink so it's light to store and draw.
-        const scale = Math.min(1, 360 / Math.min(src.width, src.height));
+      src.onload = async () => {
+        // Keep it light to store and fast to draw, but sharp enough for the large CTA shot.
+        const scale = Math.min(1, 720 / Math.min(src.width, src.height));
         const c = document.createElement("canvas");
         c.width = Math.round(src.width * scale);
         c.height = Math.round(src.height * scale);
         c.getContext("2d")!.drawImage(src, 0, 0, c.width, c.height);
-        const url = c.toDataURL("image/jpeg", 0.85);
+        const url = c.toDataURL("image/jpeg", 0.88);
         const img = new Image();
-        img.onload = () => setPresenterPhoto(img);
+        img.onload = async () => {
+          try {
+            const face = await detectFace(img);
+            if (!face) {
+              setPhotoStatus({ busy: false, error: "No face found — use a clear, front-facing photo with the mouth closed." });
+              return;
+            }
+            setPresenterPhoto({ img, face });
+            savePref("audit.presenterPhoto", url);
+            savePref("audit.presenterFace", face);
+            setPhotoStatus({ busy: false, error: null });
+          } catch (err) {
+            setPhotoStatus({ busy: false, error: err instanceof Error ? err.message : "Couldn't analyse the photo" });
+          }
+        };
         img.src = url;
-        savePref("audit.presenterPhoto", url);
       };
       src.src = reader.result as string;
     };
@@ -706,27 +726,42 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
                   placeholder={`Presenter name (default: ${voicePreset(voice.voice).name})`}
                   className="w-full rounded-lg bg-ink-900 px-3 py-2 text-sm text-ivory ring-1 ring-white/10 placeholder:text-ivory/30 focus:ring-gold-500/60"
                 />
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-3 text-xs">
+                  {presenterPhoto && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={presenterPhoto.img.src} alt="" className="h-11 w-11 rounded-full object-cover ring-2 ring-gold-500/60" />
+                  )}
                   <label className="cursor-pointer rounded-full px-3 py-1.5 text-ivory/80 ring-1 ring-white/15 hover:bg-white/5">
-                    {presenterPhoto ? "Change photo" : "Use your photo"}
-                    <input type="file" accept="image/*" className="hidden" onChange={(e) => onPhoto(e.target.files?.[0])} />
+                    {photoStatus.busy ? "Finding face…" : presenterPhoto ? "Change photo" : "Upload presenter photo"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={photoStatus.busy}
+                      onChange={(e) => {
+                        onPhoto(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
                   </label>
                   {presenterPhoto && (
                     <button
                       onClick={() => {
                         setPresenterPhoto(null);
                         savePref("audit.presenterPhoto", "");
+                        savePref("audit.presenterFace", null);
                       }}
                       className="text-ivory/50 hover:text-ivory"
                     >
-                      Use illustrated presenter
+                      Remove
                     </button>
                   )}
                 </div>
+                {photoStatus.error && <p className="text-[11px] leading-snug text-rose-300">{photoStatus.error}</p>}
                 <p className="text-[11px] leading-snug text-ivory/40">
                   {presenterPhoto
-                    ? "Your photo appears with a glow that pulses as the narrator speaks."
-                    : "The illustrated presenter lip-syncs to the narration and matches the chosen voice."}
+                    ? "Your photo lip-syncs to the narration."
+                    : "Upload a real, front-facing photo (mouth closed, good light). It will lip-sync to the narration."}
                 </p>
               </>
             )}
