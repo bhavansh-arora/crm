@@ -64,6 +64,24 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   named source if it doesn't already exist as a Lead Source. A matching
   `GET /api/external/sources` lists current source names, so the pushing
   tool can offer a picker instead of a fixed, hardcoded source.
+- **Website audit + AI walkthrough video**: the Site Audit page (also a
+  "🔍 Audit site" link next to any lead's website) takes a URL and produces
+  a scored report (0-100, grade A-F) of what's wrong with the site, across
+  security/HTTPS, speed (plus Google Lighthouse scores), Google/SEO
+  visibility, mobile experience, accessibility, lead capture (call button,
+  enquiry form, WhatsApp, CTAs, reviews, analytics) and outdated code
+  (obsolete tags, old copyright year, broken links, old jQuery/WordPress).
+  Every problem comes with why it costs the business customers and how to fix
+  it. With `ANTHROPIC_API_KEY` set, Claude also looks at a full-page
+  screenshot and writes a plain-English summary, the top problems, design
+  observations, quick wins and a closing pitch. The same page renders a
+  60-90 second **walkthrough video** in the browser: an animated score
+  intro, a guided scroll down the real site with each problem called out,
+  captions, and an outro with your agency's name and contact line. Preview
+  it with the browser's voice, optionally generate an AI voiceover
+  (`ELEVENLABS_API_KEY`), then export an MP4/WebM to send to the prospect.
+  Also: save the report as PDF, or copy a ready-made WhatsApp summary. See
+  "Website audit (optional keys)" below.
 - **One-touch calling**: a Call button on every lead dials out via the
   device's phone app (`tel:` link — works great on mobile, needs a
   softphone on desktop). A dedicated Dialer page turns this into a queue:
@@ -238,6 +256,28 @@ result and an error saying it isn't set up).
    emails. If `SMTP_HOST` isn't set, this is skipped (logged, not an error).
 
 Redeploy/restart after setting these.
+
+## Website audit (optional keys)
+
+The Site Audit page works with no configuration: it fetches the site, runs
+~50 checks and captures a full-page screenshot (via thum.io's free tier).
+Three optional keys make it better:
+
+| Env var | What it adds |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | AI-written report (summary, top problems, design review from the screenshot, pitch) and a video script tailored to the actual page. Without it the video uses a template script built from the top findings. |
+| `PAGESPEED_API_KEY` | Google Lighthouse mobile scores and Core Web Vitals. Free: Google Cloud Console → enable "PageSpeed Insights API" → Credentials → API key. Without it Google usually rate-limits the request and those scores are skipped. |
+| `ELEVENLABS_API_KEY` | A "Generate AI voiceover" button; the narration is then included in the exported video file. (`ELEVENLABS_VOICE_ID` picks a voice.) Without it, previews use the browser's built-in voice and exported videos have captions only. |
+
+Notes:
+- An audit takes 30-90 seconds. On Vercel the route asks for up to 300s
+  (`maxDuration`), which needs Fluid Compute (on by default for new
+  projects) — on the old Hobby limit of 60s, long AI reports can time out.
+- The video is rendered and recorded in the rep's browser in real time
+  (Chrome/Edge export MP4, others WebM), so keep the tab visible while it
+  records.
+- The audit server only fetches public websites — localhost, private IPs
+  and non-standard ports are refused.
 
 ## Notes
 

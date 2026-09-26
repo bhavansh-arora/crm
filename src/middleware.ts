@@ -33,6 +33,7 @@ export const config = {
     "/activity/:path*",
     "/dialer/:path*",
     "/templates/:path*",
+    "/audit/:path*",
     "/api/leads/:path*",
     "/api/users/:path*",
     "/api/followups/:path*",
@@ -41,6 +42,7 @@ export const config = {
     "/api/admin/:path*",
     "/api/payment-links/:path*",
     "/api/whatsapp-templates/:path*",
+    "/api/site-audit/:path*",
     "/api/heartbeat",
   ],
 };

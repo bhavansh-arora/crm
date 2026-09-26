@@ -20,3 +20,14 @@ select,
 textarea {
   @apply outline-none;
 }
+
+@media print {
+  header,
+  nav,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+}

@@ -21,6 +21,7 @@ const ADMIN_SECONDARY_ITEMS: NavItem[] = [
   { href: "/sources", label: "Sources", icon: "🏷️" },
   { href: "/activity", label: "Activity", icon: "📈" },
   { href: "/templates", label: "WhatsApp Templates", icon: "💬" },
+  { href: "/audit", label: "Site Audit", icon: "🔍" },
 ];
 
 const REP_ITEMS: NavItem[] = [
@@ -32,6 +33,7 @@ const REP_ITEMS: NavItem[] = [
 
 const REP_SECONDARY_ITEMS: NavItem[] = [
   { href: "/templates", label: "WhatsApp Templates", icon: "💬" },
+  { href: "/audit", label: "Site Audit", icon: "🔍" },
 ];
 
 export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SALES_REP" }) {

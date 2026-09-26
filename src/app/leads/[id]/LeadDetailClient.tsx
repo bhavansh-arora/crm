@@ -824,6 +824,12 @@ export function CompanyWebsiteEditor({
             >
               {formatWebsiteDisplay(website)}
             </a>
+            <Link
+              href={`/audit?url=${encodeURIComponent(websiteHref(website))}`}
+              className="rounded-md px-1.5 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-brand-100 hover:bg-brand-50"
+            >
+              🔍 Audit site
+            </Link>
           </>
         )}
       </div>
