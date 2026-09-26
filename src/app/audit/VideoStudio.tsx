@@ -6,8 +6,8 @@ import type { AuditReport, VideoScene } from "@/lib/site-audit/types";
 import { BODY_FONT, DISPLAY_FONT } from "./fonts";
 import { renderAmbientMusic } from "./music";
 import { estimateDuration, renderFrame, VIDEO_H, VIDEO_W, type RenderInput, type TimedScene } from "./video-renderer";
-import { loadVoiceEngine, synthesize, VOICE_SAMPLE_RATE } from "./voice-engine";
-import { DEFAULT_VOICE_SETTINGS, depthFactor, VOICES, type VoiceSettings } from "./voices";
+import { loadVoiceEngine, synthesize, VOICE_SAMPLE_RATE, type SpeechSegment } from "./voice-engine";
+import { DEFAULT_VOICE_SETTINGS, VOICES, type VoiceSettings } from "./voices";
 
 type Mode = "idle" | "preview" | "recording";
 type VoiceStatus =
@@ -35,7 +35,14 @@ function savePref(key: string, value: unknown) {
   }
 }
 
-const settingsKey = (s: VoiceSettings) => `${s.voice}|${s.accent.toFixed(2)}|${s.speed.toFixed(2)}|${(s.authority ?? 0).toFixed(2)}`;
+const settingsKey = (s: VoiceSettings) => `${s.voice}|${s.accent.toFixed(2)}|${s.speed.toFixed(2)}`;
+
+// Narration starts this long into each scene (after the crossfade), and the
+// captions use the same offset so they track the voice exactly.
+const SPEECH_LEAD = 0.55;
+const SPEECH_TAIL = 0.6;
+
+type Narration = { buffer: AudioBuffer; segments: SpeechSegment[] };
 
 function Slider({ label, value, min, max, step, left, right, onChange }: {
   label: string; value: number; min: number; max: number; step: number; left: string; right: string; onChange: (v: number) => void;
@@ -69,7 +76,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   const [videoExt, setVideoExt] = useState("webm");
   const [error, setError] = useState<string | null>(null);
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>({ state: "idle" });
-  const [voiceBuffers, setVoiceBuffers] = useState<Map<string, AudioBuffer>>(new Map());
+  const [voiceBuffers, setVoiceBuffers] = useState<Map<string, Narration>>(new Map());
   const [editing, setEditing] = useState(false);
   const [sampling, setSampling] = useState(false);
 
@@ -83,7 +90,9 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     setAgencyName(loadPref("audit.agencyName", ""));
     setAgencyContact(loadPref("audit.agencyContact", ""));
     // Merge so settings saved before a new option existed pick up its default.
-    setVoice({ ...DEFAULT_VOICE_SETTINGS, ...loadPref<Partial<VoiceSettings>>("audit.voice", {}) });
+    // Settings saved for a voice that no longer exists fall back to the defaults.
+    const saved = loadPref<Partial<VoiceSettings>>("audit.voice", {});
+    setVoice(VOICES.some((v) => v.id === saved.voice) ? { ...DEFAULT_VOICE_SETTINGS, ...saved } : DEFAULT_VOICE_SETTINGS);
     setIncludeMusic(loadPref("audit.music", true));
     // Canvas text only picks up web fonts once they're loaded.
     Promise.all([
@@ -117,9 +126,9 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   const timed: TimedScene[] = useMemo(() => {
     let start = 0;
     return scenes.map((s) => {
-      const buf = includeVoice ? voiceBuffers.get(`${vKey}|${s.narration}`) : null;
-      const duration = buf ? buf.duration + 1.1 : estimateDuration(s.narration);
-      const t = { ...s, start, duration };
+      const n = includeVoice ? voiceBuffers.get(`${vKey}|${s.narration}`) : undefined;
+      const duration = n ? SPEECH_LEAD + n.buffer.duration + SPEECH_TAIL : estimateDuration(s.narration);
+      const t: TimedScene = { ...s, start, duration, speech: n ? { lead: SPEECH_LEAD, segments: n.segments } : undefined };
       start += duration;
       return t;
     });
@@ -158,6 +167,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
       proof: {
         quotes: content.testimonials,
         trust: content.trustSignals,
+        sectionTitle: content.proofSection ?? null,
         points: ai?.socialProof.recommendations ?? [
           "Show your Google rating near the top",
           "Add real names, cities and photos",
@@ -215,11 +225,8 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     return audioCtxRef.current;
   }
 
-  // Labelling the samples with a lower sample rate plays them back slower
-  // and deeper — the "authority" effect (the engine synthesised them faster
-  // to compensate, so the pace is unchanged).
-  function toAudioBuffer(samples: Float32Array<ArrayBuffer>, settings: VoiceSettings = voice): AudioBuffer {
-    const buf = getAudioCtx().createBuffer(1, samples.length, Math.round(VOICE_SAMPLE_RATE * depthFactor(settings)));
+  function toAudioBuffer(samples: Float32Array<ArrayBuffer>): AudioBuffer {
+    const buf = getAudioCtx().createBuffer(1, samples.length, VOICE_SAMPLE_RATE);
     buf.copyToChannel(samples, 0);
     return buf;
   }
@@ -243,8 +250,8 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
       await ensureEngine();
       setVoiceStatus({ state: "idle" });
       const preset = VOICES.find((v) => v.id === voice.voice)!;
-      const samples = await synthesize(
-        `Namaste, I'm ${preset.name}. Let me walk you through ${report.domain}, and show you exactly what's holding it back.`,
+      const { samples } = await synthesize(
+        `Hi, I'm ${preset.name}! I've just gone through ${report.domain}, and there are a few things I really want to show you.`,
         voice
       );
       const actx = getAudioCtx();
@@ -259,7 +266,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     }
   }
 
-  async function generateVoiceover(): Promise<Map<string, AudioBuffer> | null> {
+  async function generateVoiceover(): Promise<Map<string, Narration> | null> {
     setError(null);
     try {
       await ensureEngine();
@@ -268,8 +275,8 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
       let done = scenes.length - todo.length;
       setVoiceStatus({ state: "generating", done, total: scenes.length });
       for (const s of todo) {
-        const samples = await synthesize(s.narration, voice);
-        next.set(`${vKey}|${s.narration}`, toAudioBuffer(samples));
+        const speech = await synthesize(s.narration, voice);
+        next.set(`${vKey}|${s.narration}`, { buffer: toAudioBuffer(speech.samples), segments: speech.segments });
         done++;
         setVoiceStatus({ state: "generating", done, total: scenes.length });
       }
@@ -309,9 +316,9 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     // Recompute timing with the freshest buffers.
     let start = 0;
     const sceneTimes = scenes.map((s) => {
-      const buf = includeVoice ? buffers.get(`${vKey}|${s.narration}`) : undefined;
-      const duration = buf ? buf.duration + 1.1 : estimateDuration(s.narration);
-      const t = { ...s, start, duration, buf };
+      const n = includeVoice ? buffers.get(`${vKey}|${s.narration}`) : undefined;
+      const duration = n ? SPEECH_LEAD + n.buffer.duration + SPEECH_TAIL : estimateDuration(s.narration);
+      const t = { ...s, start, duration, buf: n?.buffer, speech: n ? { lead: SPEECH_LEAD, segments: n.segments } : undefined };
       start += duration;
       return t;
     });
@@ -354,7 +361,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
         }
       });
     };
-    if (haveVoice) sceneTimes.forEach((s) => schedule(s.buf!, t0 + s.start + 0.6, 1, true));
+    if (haveVoice) sceneTimes.forEach((s) => schedule(s.buf!, t0 + s.start + SPEECH_LEAD, 1, true));
     if (music) schedule(music, t0, MUSIC_GAIN);
 
     let recorder: MediaRecorder | null = null;
@@ -552,9 +559,8 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
             </button>
           </div>
 
-          <Slider label="Accent" value={voice.accent} min={0.5} max={1} step={0.05} left="Neutral" right="Strong Indian" onChange={(v) => updateVoice({ accent: v })} />
-          <Slider label="Pace" value={voice.speed} min={0.8} max={1.15} step={0.02} left="Measured" right="Brisk" onChange={(v) => updateVoice({ speed: v })} />
-          <Slider label="Authority" value={voice.authority} min={0} max={1} step={0.1} left="Natural" right="Commanding" onChange={(v) => updateVoice({ authority: v })} />
+          <Slider label="Accent" value={voice.accent} min={0} max={1} step={0.05} left="Neutral" right="Strong Indian" onChange={(v) => updateVoice({ accent: v })} />
+          <Slider label="Pace" value={voice.speed} min={0.9} max={1.25} step={0.02} left="Relaxed" right="Fast" onChange={(v) => updateVoice({ speed: v })} />
 
           <div className="space-y-2 text-sm">
             <label className="flex items-center justify-between gap-3">

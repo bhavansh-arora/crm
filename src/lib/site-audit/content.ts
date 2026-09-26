@@ -1,4 +1,5 @@
 import { findTags, innerTexts, stripTags } from "./analyze";
+import { isStorePage, PAYMENT_RE, PRICE_RE } from "./site-type";
 import type { AuditCategory, FunnelItem, FunnelStage, SiteContent } from "./types";
 
 // Pulls out what the page actually *says* — headline, calls-to-action,
@@ -7,7 +8,18 @@ import type { AuditCategory, FunnelItem, FunnelStage, SiteContent } from "./type
 // BOF (turn interest into an enquiry).
 
 const CTA_RE =
-  /\b(call( us| now)?|book|get (a |your )?(free )?(quote|estimate|started|in touch|consultation|demo)|contact( us)?|enquire|inquire|request|schedule|buy|order|shop|sign ?up|subscribe|register|download|apply|join|start|try|whatsapp|chat)\b/i;
+  /\b(call( us| now)?|book|get (a |your )?(free )?(quote|estimate|started|in touch|consultation|demo)|get (instant )?access|contact( us)?|enquire|inquire|request|schedule|buy|order|shop|add to (cart|bag)|checkout|enrol+|claim|unlock|sign ?up|subscribe|register|download|apply|join|start|try|whatsapp|chat)\b/i;
+
+// "GET INSTANT ACCESS — ₹2,999 ₹599 →" → "Get instant access"
+function ctaLabel(t: string): string {
+  const stripped = t
+    .replace(/[—–-]\s*(₹|rs\.?|\$|€|£)[\s\S]*$/i, "")
+    .replace(/(₹|rs\.?|\$|€|£)\s?[\d,]+(\.\d+)?/gi, "")
+    .replace(/[→›»>]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return stripped === stripped.toUpperCase() ? stripped.charAt(0) + stripped.slice(1).toLowerCase() : stripped;
+}
 
 function clean(s: string, max = 220): string {
   const t = s.replace(/\s+/g, " ").trim();
@@ -41,9 +53,11 @@ function extractTestimonials(html: string): string[] {
 }
 
 function extractTrustSignals(text: string): string[] {
-  const found = new Set<string>();
+  const found = new Map<string, string>();
   const patterns: RegExp[] = [
-    /\b\d{1,3}(?:,\d{3})*\+?\s*(?:happy |satisfied )?(?:clients|customers|patients|students|projects|families|businesses|installations|orders)\b/gi,
+    /\b\d{1,3}(?:,\d{3})*\+?\s*(?:happy |satisfied )?(?:clients|customers|patients|students|projects|families|businesses|installations|orders|people|members|buyers|creators|sellers|subscribers|downloads|users)\b/gi,
+    /\b\d+[kKmM]?\+?\s*(?:combined )?views\b/g,
+    /\b\d+[- ]day(?:s)?\s+money[- ]back guarantee\b|\bmoney[- ]back guarantee\b/gi,
     /\b\d{1,2}\+?\s*years?(?: of)? (?:experience|in business|of service|of excellence|serving)\b/gi,
     /\b(?:since|established|estd\.?)\s*(?:in\s*)?(?:19|20)\d{2}\b/gi,
     /\b[1-5](?:\.\d)?\s*(?:\/\s*5|stars?|★)(?:\s*(?:rating|on google|google rating))?\b/gi,
@@ -52,11 +66,12 @@ function extractTrustSignals(text: string): string[] {
   ];
   for (const re of patterns) {
     for (const m of text.matchAll(re)) {
-      found.add(clean(m[0], 60));
+      const t = clean(m[0], 60);
+      if (!found.has(t.toLowerCase())) found.set(t.toLowerCase(), t);
       if (found.size >= 8) break;
     }
   }
-  return [...found];
+  return [...found.values()];
 }
 
 export function extractContent(html: string, finalUrl: string): SiteContent {
@@ -86,8 +101,8 @@ export function extractContent(html: string, finalUrl: string): SiteContent {
   const ctas = Array.from(
     new Set(
       [...buttonTexts, ...linkTexts]
-        .map((t) => clean(t, 40))
-        .filter((t) => t && t.split(" ").length <= 6 && CTA_RE.test(t))
+        .map((t) => ctaLabel(clean(t, 80)))
+        .filter((t) => t && t.split(" ").length <= 7 && CTA_RE.test(t))
     )
   ).slice(0, 12);
 
@@ -97,7 +112,7 @@ export function extractContent(html: string, finalUrl: string): SiteContent {
     about: has(/about|our[- ]story|who[- ]we[- ]are|team/),
     services: has(/services?|solutions|products?|treatments|courses|menu|what[- ]we[- ]do/),
     pricing: has(/pricing|prices?|packages?|plans|fees|rates/) || /₹\s?\d|rs\.?\s?\d|\$\s?\d/i.test(bodyText),
-    faq: has(/faq|frequently|questions/),
+    faq: has(/faq|frequently|questions/) || headings.some((h) => /faq|frequently asked|questions/i.test(h.text)) || (vis.match(/<details\b/gi)?.length ?? 0) >= 3,
     blog: has(/blog|articles|news|insights|resources/),
     caseStudies: has(/case[- ]stud|portfolio|our[- ]work|projects|success[- ]stor/),
     contact: has(/contact|get[- ]in[- ]touch|reach[- ]us/),
@@ -106,7 +121,27 @@ export function extractContent(html: string, finalUrl: string): SiteContent {
   };
 
   void finalUrl;
+  const siteType = isStorePage(html, bodyText) ? "store" : "business";
+  const proofSection =
+    headings.find((h) =>
+      /testimonial|review|what (our |people |they )?(customers|clients|students|members|people)? ?(say|said)|success stor|real (people|results|launches|progress)|results|wins|love[ds]? by|case stud|not just us|hall of fame/i.test(h.text)
+    )?.text ?? null;
+  const hasDemoVideo = /<video\b|youtube\.com\/embed|youtu\.be|player\.vimeo\.com|wistia|vturb|loom\.com\/embed/i.test(html);
+  // The lowest price shown is the one being charged (others are usually
+  // struck-through "was" prices).
+  const prices = [...bodyText.matchAll(new RegExp(PRICE_RE.source, "gi"))]
+    .map((m) => ({ text: m[0].trim(), value: Number(m[0].replace(/[^\d.]/g, "")) }))
+    .filter((p) => p.value > 0);
+  const price = prices.length ? prices.reduce((a, b) => (b.value < a.value ? b : a)).text : null;
   return {
+    siteType,
+    proofSection,
+    hasFaq: pages.faq,
+    hasDemoVideo,
+    hasGuarantee: /(money[- ]back|refund|guarantee|no questions asked)/i.test(bodyText),
+    hasUrgency: /(price (rises|increases|goes up)|limited (time|seats|spots|offer|stock)|ends (in|soon|tonight)|only \d+ (left|spots|seats)|countdown|offer ends|hurry|today only|last chance)/i.test(bodyText + " " + html.slice(0, 50000)),
+    hasPaymentBadges: PAYMENT_RE.test(html),
+    price,
     heroHeadline,
     heroSubheadline,
     headings,
@@ -151,22 +186,49 @@ export function buildFunnel(content: SiteContent, categories: AuditCategory[]): 
     item("Content that attracts traffic", content.pages.blog, "Has a blog / resources section.", "No blog or guides to attract new visitors from Google."),
   ];
 
-  const mof: FunnelItem[] = [
+  const testimonialsState: boolean | "partial" =
+    content.testimonials.length >= 2 || (content.proofSection && content.testimonials.length >= 1)
+      ? true
+      : content.testimonials.length === 1 || content.proofSection || checkStatus(categories, "social-proof") === "pass"
+        ? "partial"
+        : false;
+  const testimonialsNote = content.testimonials.length
+    ? `${content.testimonials.length} written testimonials found on the page.`
+    : content.proofSection
+      ? `A results section ("${content.proofSection}") exists, but there are no written, named testimonials to read.`
+      : "";
+  const store = content.siteType === "store";
+
+  const mofStore: FunnelItem[] = [
+    item("What you get is clear", content.headings.length >= 4 || content.pages.services, "The page explains the offer section by section.", "It's unclear what exactly the buyer gets."),
+    item("Demo / walkthrough video", content.hasDemoVideo, "A video shows the product in action.", "No demo video — buyers can't see what they're paying for."),
+    item("Testimonials & results", testimonialsState, testimonialsNote, "No testimonials or results — nothing proves it works."),
+    item("Trust signals", content.trustSignals.length >= 2 ? true : content.trustSignals.length === 1 ? "partial" : false, `Shows: ${content.trustSignals.slice(0, 3).join(", ")}.`, "No buyer counts, ratings or other trust numbers."),
+    item("Answers to objections (FAQ)", content.hasFaq, "An FAQ handles buyers' doubts.", "No FAQ — doubts go unanswered and buyers hesitate."),
+    item("Who is behind it", content.pages.about, "Buyers can see who's behind the product.", "No about / creator section — buyers don't know who they're trusting."),
+  ];
+
+  const mof: FunnelItem[] = store ? mofStore : [
     item("Clear services / offering", content.pages.services, "Services are easy to find.", "Visitors can't easily see what's offered."),
     item("About the business", content.pages.about, "An about/story section builds familiarity.", "Nothing tells visitors who is behind the business."),
-    item(
-      "Testimonials & reviews",
-      content.testimonials.length >= 2 ? true : content.testimonials.length === 1 || checkStatus(categories, "social-proof") === "pass" ? "partial" : false,
-      `${content.testimonials.length} testimonials found on the page.`,
-      content.testimonials.length ? "Only minimal social proof — one quote isn't enough." : "No testimonials or reviews — nothing proves others trust this business."
-    ),
+    item("Testimonials & reviews", testimonialsState, testimonialsNote || "Only minimal social proof.", "No testimonials or reviews — nothing proves others trust this business."),
     item("Trust signals", content.trustSignals.length >= 2 ? true : content.trustSignals.length === 1 ? "partial" : false, `Shows: ${content.trustSignals.slice(0, 3).join(", ")}.`, "No numbers, years in business, ratings or certifications shown."),
     item("Proof of work", content.pages.caseStudies || content.pages.gallery, "Portfolio / case studies / gallery present.", "No case studies, portfolio or gallery to show results."),
     item("Answers to objections (FAQ)", content.pages.faq, "An FAQ handles common doubts.", "No FAQ — doubts go unanswered and visitors hesitate."),
     item("Pricing transparency", content.pages.pricing, "Pricing or packages are visible.", "No pricing guidance — many visitors leave rather than ask."),
   ];
 
-  const bof: FunnelItem[] = [
+  const bofStore: FunnelItem[] = [
+    item("Buy button", content.ctas.length >= 1, `Buy button: "${content.ctas[0] ?? ""}", repeated down the page.`, "No clear buy button."),
+    item("Price shown", !!content.price, `Price is visible (${content.price}).`, "No price shown — buyers leave rather than ask."),
+    item("Payment options shown", content.hasPaymentBadges, "UPI / card logos reassure buyers at checkout.", "No payment badges near the buy button."),
+    item("Guarantee / risk reversal", content.hasGuarantee, "A guarantee removes the risk of buying.", "No guarantee — the buyer carries all the risk."),
+    item("Urgency or offer", content.hasUrgency || content.hasOffer, "A deadline or offer gives a reason to buy today.", "No reason to buy now rather than later."),
+    fromCheck("whatsapp", "WhatsApp support", "Buyers can ask a quick question on WhatsApp.", "No WhatsApp — last-minute doubts go unanswered."),
+    fromCheck("analytics", "Tracking & retargeting", "Pixel installed to retarget visitors who didn't buy.", "No tracking — visitors who leave can't be retargeted."),
+  ];
+
+  const bof: FunnelItem[] = store ? bofStore : [
     item("Clear call-to-action", content.ctas.length >= 2 ? true : content.ctas.length === 1 ? "partial" : false, `CTAs: ${content.ctas.slice(0, 3).map((c) => `"${c}"`).join(", ")}.`, content.ctas.length ? "Only one weak call-to-action." : "No button telling visitors what to do next."),
     fromCheck("tap-to-call", "Tap-to-call", "Phone number is one tap away.", "Mobile visitors can't call in one tap."),
     fromCheck("whatsapp", "WhatsApp chat", "Visitors can message on WhatsApp.", "No WhatsApp button — the channel Indian customers prefer."),
@@ -182,6 +244,6 @@ export function buildFunnel(content: SiteContent, categories: AuditCategory[]): 
   return [
     { id: "tof", name: "Top of funnel", goal: "Get found & grab attention", score: score(tof), items: tof },
     { id: "mof", name: "Middle of funnel", goal: "Build interest & trust", score: score(mof), items: mof },
-    { id: "bof", name: "Bottom of funnel", goal: "Turn visitors into enquiries", score: score(bof), items: bof },
+    { id: "bof", name: "Bottom of funnel", goal: store ? "Turn visitors into buyers" : "Turn visitors into enquiries", score: score(bof), items: bof },
   ];
 }

@@ -2,7 +2,7 @@
 // and returned as a data: URL so the browser can draw it onto a canvas for
 // the video without tainting it (cross-origin images can't be recorded).
 export function fetchThumScreenshot(url: string): Promise<string | null> {
-  return fetchThum(`width/1280/crop/7000/noanimate/${url}`);
+  return fetchThum(`width/1280/fullpage/noanimate/${url}`);
 }
 
 // The first screen a phone visitor sees ("above the fold"): real iPhone

@@ -1,4 +1,5 @@
 import { safeFetch, type SafeResponse } from "./safe-fetch";
+import { BUY_RE, isStorePage, PAYMENT_RE } from "./site-type";
 import type { AuditCategory, AuditCheck, CategoryId, CheckStatus, Severity } from "./types";
 
 // Heuristic, dependency-free checks run against the raw HTML + response
@@ -133,6 +134,7 @@ export type HtmlAnalysis = {
   categories: AuditCategory[];
   // Short text excerpt of the page, handed to the AI for context.
   textExcerpt: string;
+  isStore: boolean;
   html: string;
 };
 
@@ -322,10 +324,18 @@ export async function analyzeSite(inputUrl: string): Promise<HtmlAnalysis> {
     fixedWidth ? "Found fixed pixel widths (960px+) that force sideways scrolling on phones." : "No large fixed-width layout found.",
     { fix: "Replace fixed widths with fluid (max-width / %) layouts." });
 
+  // Online stores / sales pages convert through a buy button, not phone
+  // calls or enquiry forms, so those checks don't count against them.
+  const isStore = isStorePage(html, bodyText);
   const telLinks = anchors.filter((a) => /^tel:/i.test(a.attrs.href || ""));
-  list.add("mobile", "tap-to-call", "Tap-to-call phone link", telLinks.length ? "pass" : "fail", "high",
-    telLinks.length ? "Phone number is a tappable call link." : "No tap-to-call link — mobile visitors must copy the number by hand.",
-    { impact: "Every extra step loses calls from ready-to-buy customers.", fix: "Wrap the phone number in a tel: link, ideally as a sticky Call button." });
+  if (isStore) {
+    list.add("mobile", "tap-to-call", "Tap-to-call phone link", telLinks.length ? "pass" : "info", "low",
+      telLinks.length ? "Phone number is a tappable call link." : "No phone link — fine for an online store, where the buy button does the selling.");
+  } else {
+    list.add("mobile", "tap-to-call", "Tap-to-call phone link", telLinks.length ? "pass" : "fail", "high",
+      telLinks.length ? "Phone number is a tappable call link." : "No tap-to-call link — mobile visitors must copy the number by hand.",
+      { impact: "Every extra step loses calls from ready-to-buy customers.", fix: "Wrap the phone number in a tel: link, ideally as a sticky Call button." });
+  }
 
   const icon = links.find((l) => /icon/i.test(l.attrs.rel || ""));
   list.add("mobile", "favicon", "Favicon / app icon", icon ? "pass" : "warn", "low",
@@ -363,9 +373,14 @@ export async function analyzeSite(inputUrl: string): Promise<HtmlAnalysis> {
   // ---------- Conversion ----------
   const textLower = bodyText.toLowerCase();
   const hasPhone = telLinks.length > 0 || /(\+?\d[\d\s().-]{8,}\d)/.test(bodyText);
-  list.add("conversion", "phone", "Phone number visible", hasPhone ? "pass" : "fail", "high",
-    hasPhone ? "A phone number is shown on the page." : "No phone number found on the homepage.",
-    { impact: "Visitors who want to call have no way to — they call a competitor.", fix: "Show the phone number in the header of every page." });
+  if (isStore) {
+    list.add("conversion", "phone", "Phone number visible", hasPhone ? "pass" : "info", "low",
+      hasPhone ? "A phone number is shown on the page." : "No phone number — not essential for an online store.");
+  } else {
+    list.add("conversion", "phone", "Phone number visible", hasPhone ? "pass" : "fail", "high",
+      hasPhone ? "A phone number is shown on the page." : "No phone number found on the homepage.",
+      { impact: "Visitors who want to call have no way to — they call a competitor.", fix: "Show the phone number in the header of every page." });
+  }
 
   const hasEmail = anchors.some((a) => /^mailto:/i.test(a.attrs.href || "")) || /[\w.+-]+@[\w-]+\.[\w.]+/.test(bodyText);
   list.add("conversion", "email", "Email contact", hasEmail ? "pass" : "warn", "low",
@@ -373,26 +388,44 @@ export async function analyzeSite(inputUrl: string): Promise<HtmlAnalysis> {
     { fix: "Show a clickable email address." });
 
   const hasForm = findTags(html, "form").length > 0 || /(typeform|jotform|hubspot|wpcf7|gform|calendly)/i.test(lower);
-  list.add("conversion", "contact-form", "Enquiry / booking form", hasForm ? "pass" : "fail", "high",
-    hasForm ? "The page has a form visitors can fill in." : "No enquiry or booking form on the homepage.",
-    { impact: "Visitors browsing at night or at work can't leave their details — those leads are lost.", fix: "Add a short enquiry form (name, phone, need) above the fold." });
+  if (isStore) {
+    const support = hasForm || anchors.some((a) => /contact|support|help/i.test(a.attrs.href || ""));
+    list.add("conversion", "contact-form", "Support / contact option", support ? "pass" : "warn", "low",
+      support ? "Buyers can reach support before purchasing." : "No visible way to contact support.",
+      { impact: "Buyers with a last-minute doubt have nowhere to ask.", fix: "Link a contact or support page in the header and footer." });
+  } else {
+    list.add("conversion", "contact-form", "Enquiry / booking form", hasForm ? "pass" : "fail", "high",
+      hasForm ? "The page has a form visitors can fill in." : "No enquiry or booking form on the homepage.",
+      { impact: "Visitors browsing at night or at work can't leave their details — those leads are lost.", fix: "Add a short enquiry form (name, phone, need) above the fold." });
+  }
 
   const hasWhatsApp = /(wa\.me\/|api\.whatsapp\.com|whatsapp:\/\/)/i.test(lower);
-  list.add("conversion", "whatsapp", "WhatsApp chat button", hasWhatsApp ? "pass" : "warn", "medium",
+  list.add("conversion", "whatsapp", "WhatsApp chat button", hasWhatsApp ? "pass" : "warn", isStore ? "low" : "medium",
     hasWhatsApp ? "Visitors can message on WhatsApp in one tap." : "No WhatsApp chat link.",
     { impact: "Most customers prefer messaging over calling or email.", fix: "Add a floating WhatsApp button." });
 
   const ctaRe = /\b(call now|call us|book|get (a )?(free )?(quote|estimate|started)|contact us|enquire|inquire|request|schedule|buy now|order now|sign up|get in touch|free consultation|shop now)\b/i;
   const buttonsText = [...innerTexts(html, "a"), ...innerTexts(html, "button")].join(" | ");
-  const hasCta = ctaRe.test(buttonsText);
+  const hasCta = ctaRe.test(buttonsText) || BUY_RE.test(buttonsText);
   list.add("conversion", "cta", "Clear call-to-action", hasCta ? "pass" : "fail", "high",
     hasCta ? "The page has clear action buttons (e.g. \"Contact us\", \"Get a quote\")." : "No clear call-to-action buttons like \"Get a Quote\" or \"Book Now\".",
     { impact: "Visitors don't know what to do next, so they leave.", fix: "Add a prominent, repeated CTA button telling visitors exactly what to do." });
 
-  const hasTrust = /(testimonial|review|rated|stars?\b|trusted by|happy (customers|clients)|google reviews|trustpilot|case stud)/i.test(textLower);
+  const hasTrust = /(testimonial|review|rated|stars?\b|trusted by|happy (customers|clients)|google reviews|trustpilot|case stud|success stor|real (people|results|customers)|what (our )?(customers|clients|students|members) (say|said)|\d[\d,]*\+?\s*(people|customers|students|members|buyers))/i.test(textLower);
   list.add("conversion", "social-proof", "Reviews / testimonials", hasTrust ? "pass" : "warn", "medium",
     hasTrust ? "The page shows reviews or testimonials." : "No reviews, testimonials or trust signals found.",
     { impact: "92% of people read reviews before buying — no proof means no trust.", fix: "Embed Google reviews and customer testimonials." });
+
+  if (isStore) {
+    const payments = PAYMENT_RE.test(html);
+    list.add("conversion", "payment-options", "Payment options shown", payments ? "pass" : "warn", "medium",
+      payments ? "Payment methods (UPI, cards…) are visible near checkout." : "No payment method badges shown.",
+      { impact: "Buyers hesitate when they can't see how they'll pay.", fix: "Show UPI, card and wallet logos next to the buy button." });
+    const guarantee = /(money[- ]back|refund|guarantee|no questions asked)/i.test(textLower);
+    list.add("conversion", "guarantee", "Guarantee / risk reversal", guarantee ? "pass" : "warn", "medium",
+      guarantee ? "A guarantee or refund promise removes the risk of buying." : "No guarantee or refund promise.",
+      { impact: "Without a guarantee, the buyer carries all the risk — many won't.", fix: "Offer a clear money-back guarantee next to the price." });
+  }
 
   const hasAnalytics = /(googletagmanager\.com|google-analytics\.com|gtag\(|fbq\(|connect\.facebook\.net|clarity\.ms|hotjar|plausible|posthog)/i.test(lower);
   list.add("conversion", "analytics", "Visitor tracking / analytics", hasAnalytics ? "pass" : "fail", "medium",
@@ -494,6 +527,7 @@ export async function analyzeSite(inputUrl: string): Promise<HtmlAnalysis> {
     pageTitle: title,
     categories: list.categories(),
     textExcerpt: bodyText.slice(0, 3000),
+    isStore,
     html,
   };
 }

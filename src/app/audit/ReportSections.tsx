@@ -203,6 +203,15 @@ export function ProofSection({ report, n }: Props) {
             </figure>
           ))}
         </div>
+      ) : content.proofSection ? (
+        <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/40 p-6">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Results section found</div>
+          <div className="mt-1 font-display text-xl italic text-ink-900">&ldquo;{content.proofSection}&rdquo;</div>
+          <p className="mt-2 text-sm text-slate-600">
+            Proof is shown as videos or screenshots — good, but slow to take in. There are no written reviews with real names that a
+            visitor can read in seconds.
+          </p>
+        </div>
       ) : (
         <div className="rounded-2xl border-2 border-dashed border-rose-200 p-6 text-center">
           <div className="font-display text-xl text-rose-700">No testimonials found on the homepage</div>

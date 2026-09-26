@@ -1,56 +1,92 @@
 // Our narrator voices. Each is a custom blend of Kokoro's Hindi speaker
-// styles (which speak English with a natural Indian accent) plus a small
-// share of a British speaker for crisper consonants. "Accent" slides the
-// blend between the two; the defaults are tuned for a warm, polished,
-// clearly Indian-English delivery.
+// styles (which give English a natural Indian accent) with its most
+// natural-sounding, highest-rated voices (Heart, Bella, Emma, Michael…) for
+// human warmth and expressive intonation. "Accent" slides between the
+// Indian styles and the natural-voice styles.
 
-export type VoiceId = "aarohi" | "arjun";
+export type VoiceId = "meera" | "kavya" | "ananya" | "rohan" | "dev";
 
 export type VoicePreset = {
   id: VoiceId;
   name: string;
   description: string;
   indian: [string, number][];
-  clarity: string;
+  natural: [string, number][];
+  // Share of the Indian styles at the middle of the Accent slider.
+  indianShare: number;
 };
 
 export const VOICES: VoicePreset[] = [
   {
-    id: "aarohi",
-    name: "Aarohi",
-    description: "Warm, polished female voice · Indian English",
-    indian: [
-      ["hf_alpha", 0.65],
-      ["hf_beta", 0.35],
-    ],
-    clarity: "bf_emma",
+    id: "meera",
+    name: "Meera",
+    description: "Warm, friendly and natural · female",
+    indian: [["hf_alpha", 1]],
+    natural: [["af_heart", 1]],
+    indianShare: 0.45,
   },
   {
-    id: "arjun",
-    name: "Arjun",
-    description: "Calm, confident male voice · Indian English",
-    indian: [
-      ["hm_omega", 0.6],
-      ["hm_psi", 0.4],
+    id: "kavya",
+    name: "Kavya",
+    description: "Bright, energetic and upbeat · female",
+    indian: [["hf_beta", 1]],
+    natural: [
+      ["af_bella", 0.75],
+      ["af_heart", 0.25],
     ],
-    clarity: "bm_george",
+    indianShare: 0.4,
+  },
+  {
+    id: "ananya",
+    name: "Ananya",
+    description: "Crisp, polished and professional · female",
+    indian: [
+      ["hf_alpha", 0.6],
+      ["hf_beta", 0.4],
+    ],
+    natural: [["bf_emma", 1]],
+    indianShare: 0.5,
+  },
+  {
+    id: "rohan",
+    name: "Rohan",
+    description: "Confident, conversational · male",
+    indian: [["hm_omega", 1]],
+    natural: [
+      ["am_michael", 0.65],
+      ["am_fenrir", 0.35],
+    ],
+    indianShare: 0.45,
+  },
+  {
+    id: "dev",
+    name: "Dev",
+    description: "Relaxed, easy-going · male",
+    indian: [["hm_psi", 1]],
+    natural: [
+      ["am_puck", 0.6],
+      ["bm_george", 0.4],
+    ],
+    indianShare: 0.4,
   },
 ];
 
-// authority: 0 = natural pitch, 1 = deepest. The voice is synthesised a
-// little faster and played back slower, which lowers the pitch without
-// changing the pace — a deeper, more commanding delivery.
-export type VoiceSettings = { voice: VoiceId; accent: number; speed: number; authority: number };
+// accent: 0 = most natural/neutral, 0.5 = the preset's tuned balance, 1 = strongest Indian accent.
+export type VoiceSettings = { voice: VoiceId; accent: number; speed: number };
 
-export const DEFAULT_VOICE_SETTINGS: VoiceSettings = { voice: "aarohi", accent: 0.85, speed: 0.92, authority: 0.6 };
+export const DEFAULT_VOICE_SETTINGS: VoiceSettings = { voice: "meera", accent: 0.5, speed: 1.06 };
 
-// Playback-rate factor for a given authority (1 = unchanged, 0.88 = ~2 semitones lower).
-export function depthFactor(settings: VoiceSettings): number {
-  return 1 - 0.12 * Math.min(1, Math.max(0, settings.authority ?? 0));
+export function voicePreset(id: string): VoicePreset {
+  return VOICES.find((v) => v.id === id) ?? VOICES[0];
 }
 
 export function voiceMix(settings: VoiceSettings): [string, number][] {
-  const preset = VOICES.find((v) => v.id === settings.voice) ?? VOICES[0];
-  const accent = Math.min(1, Math.max(0.5, settings.accent));
-  return [...preset.indian.map(([n, w]) => [n, w * accent] as [string, number]), [preset.clarity, 1 - accent]];
+  const preset = voicePreset(settings.voice);
+  const a = Math.min(1, Math.max(0, settings.accent));
+  // Map the slider so its midpoint lands on the preset's tuned balance.
+  const share = a <= 0.5 ? (a / 0.5) * preset.indianShare : preset.indianShare + ((a - 0.5) / 0.5) * (0.85 - preset.indianShare);
+  return [
+    ...preset.indian.map(([n, w]) => [n, w * share] as [string, number]),
+    ...preset.natural.map(([n, w]) => [n, w * (1 - share)] as [string, number]),
+  ];
 }

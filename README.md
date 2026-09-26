@@ -77,7 +77,10 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   **headline and page outline**, grades the site as a **marketing funnel**
   (TOF: get found & grab attention, MOF: build trust — services,
   testimonials, proof, FAQ, pricing — and BOF: calls, WhatsApp, forms,
-  booking, offers) with the biggest leak flagged, and lists the
+  booking, offers — or, for online stores and sales pages, buy button,
+  price, payment options, guarantee and urgency; the audit detects which
+  kind of site it is and judges it accordingly) with the biggest leak
+  flagged, and lists the
   **testimonials and trust signals** found on the page. With
   `ANTHROPIC_API_KEY` set, Claude also looks at the desktop and mobile
   screenshots and writes a plain-English summary, a verdict on the mobile
@@ -292,18 +295,17 @@ Notes:
 
 ### Narration voice (no API key, no per-use cost)
 
-The video is narrated by our own voices — **Aarohi** (female) and **Arjun**
-(male) — speaking Indian English. They run entirely in the rep's browser
-(`public/voice/voice-worker.js`) on the open-weight
-[Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) text-to-speech
-model (Apache-2.0): each voice is a custom blend of Kokoro's Hindi speaker
-styles, which speak English with a natural Indian accent, plus a small
-share of a British speaker for crisp consonants. Reps can tune the
-**Accent** (neutral ↔ strong Indian), **Pace** and **Authority** (a
-slightly deeper, more commanding delivery), and hear a sample before
-recording. Narration runs through a broadcast-style chain (warmth,
-presence, gentle compression) and the AI writes it as confident,
-declarative statements.
+The video is narrated by our own voices — **Meera**, **Kavya**, **Ananya**
+(female) and **Rohan**, **Dev** (male) — speaking English with an Indian
+accent. They run entirely in the rep's browser (`public/voice/voice-worker.js`)
+on the open-weight [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M)
+text-to-speech model (Apache-2.0): each voice is a custom blend of Kokoro's
+Hindi speaker styles (for the accent) with its most natural-sounding voices
+(for warmth and expressive intonation). Reps can tune the **Accent**
+(neutral ↔ strong Indian) and **Pace**, and hear a sample before
+recording. Sentences get small, natural variations in pace, and the AI
+writes the script conversationally. Captions highlight each word in time
+with the voice, using the exact sentence timings the engine reports.
 
 - The model (~90 MB) downloads once from Hugging Face on first use and is
   then cached by the browser; the engine code loads from jsDelivr.

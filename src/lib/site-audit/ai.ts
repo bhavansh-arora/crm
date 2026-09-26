@@ -11,7 +11,7 @@ import type { AiSummary, AuditCategory, FunnelStage, SiteContent, VideoScene } f
 const SceneSchema = z.object({
   kind: z.enum(["intro", "mobile", "headline", "funnel", "proof", "walkthrough", "issue", "outro"]),
   title: z.string().describe("Short on-screen caption, max ~6 words"),
-  narration: z.string().describe("What the narrator says during this scene: 2-4 spoken sentences, ~25-55 words"),
+  narration: z.string().describe("What the narrator says during this scene, written to be spoken: 2-4 conversational sentences, ~25-50 words"),
   focus: z.number().describe("Vertical position on the full-page desktop screenshot this scene shows: 0 = very top, 1 = very bottom"),
   bullets: z.array(z.string()).describe("0-3 very short on-screen bullet points (max ~7 words each)"),
   currentHeadline: z.string().describe('For "headline" scenes: the site\'s current main headline, verbatim. Otherwise empty.'),
@@ -62,7 +62,7 @@ Write for a non-technical small-business owner: concrete, plain English, no jarg
 
 For the video script: it is a guided, chaptered review. Open with the verdict, show the phone's first screen, critique the headline and offer a sharper rewrite, walk through the funnel stage by stage, assess testimonials and trust, then scroll down the real page pointing at actual sections and calling out problems, and close with the path forward. The "focus" value must correspond to where that section really sits in the desktop screenshot.
 
-Voice and tone: the narration is read by an Indian English voice and must sound authoritative — like a senior expert delivering a verdict, not a salesperson. Speak in confident, declarative sentences. State findings as facts ("Your headline doesn't say what you do."), never hedge ("it seems", "maybe", "might want to"). Use short sentences with deliberate rhythm, and address the owner directly as "you". Write natural Indian English, use ₹ for any money, avoid American idioms and slang. Narration must read smoothly aloud: no bullet symbols, no URLs beyond the bare domain, no abbreviations a listener wouldn't say out loud (say "top of the funnel", not "TOF").`;
+Voice and tone: the narration is read aloud by an Indian English voice and must sound like a real person — a sharp, friendly expert sitting across the table from the owner, not a robot reading a report. Be conversational and energetic: use contractions (you're, it's, don't, here's), talk to the owner directly as "you", mix short punchy lines with longer ones, and use the occasional rhetorical question or natural spoken turn ("Here's the thing.", "Now look at this.", "So what happens?"). Stay confident — state findings plainly, never hedge ("it seems", "maybe", "might want to") — but keep it warm, never preachy or salesy. Write natural Indian English, use ₹ for any money, avoid American slang. Narration must read smoothly aloud: no bullet symbols, no URLs beyond the bare domain, no abbreviations a listener wouldn't say out loud (say "top of the funnel", not "TOF").`;
 
 function formatFindings(categories: AuditCategory[]): string {
   const lines: string[] = [];
@@ -79,7 +79,10 @@ function formatContent(content: SiteContent, funnel: FunnelStage[]): string {
   const pages = Object.entries(content.pages)
     .map(([k, v]) => `${k}: ${v ? "yes" : "no"}`)
     .join(", ");
-  return `Main headline: ${content.heroHeadline ?? "(none found)"}
+  return `Site type: ${content.siteType === "store" ? "online store / product sales page — judge it on how well it sells (buy button, price, proof, guarantee, urgency), not on phone calls or enquiry forms" : "service business — judge it on how well it generates calls, WhatsApp messages and enquiries"}
+Price shown: ${content.price ?? "no"} · Demo video: ${content.hasDemoVideo ? "yes" : "no"} · FAQ: ${content.hasFaq ? "yes" : "no"} · Guarantee: ${content.hasGuarantee ? "yes" : "no"} · Urgency: ${content.hasUrgency ? "yes" : "no"} · Payment badges: ${content.hasPaymentBadges ? "yes" : "no"}
+Results/testimonials section heading: ${content.proofSection ?? "(none)"}
+Main headline: ${content.heroHeadline ?? "(none found)"}
 Sub-headline: ${content.heroSubheadline ?? "(none found)"}
 Headings (in order): ${content.headings.map((h) => `H${h.level} "${h.text}"`).join(" · ") || "(none)"}
 Calls-to-action found: ${content.ctas.map((c) => `"${c}"`).join(", ") || "(none)"}

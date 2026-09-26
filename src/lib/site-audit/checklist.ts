@@ -7,6 +7,15 @@ export function mobileChecklist(report: Pick<AuditReport, "categories" | "conten
   const check = (id: string) => report.categories.flatMap((c) => c.checks).find((k) => k.id === id)?.status === "pass";
   const missing = (report.ai?.mobileFirstImpression.missingAboveFold ?? []).join(" ").toLowerCase();
   const { content } = report;
+  if (content.siteType === "store") {
+    return [
+      { label: "A clear headline", ok: !!content.heroHeadline && !/headline|value prop/.test(missing) },
+      { label: "A buy button", ok: content.ctas.length > 0 && !/buy button|cta|call-to-action/.test(missing) },
+      { label: "The price", ok: !!content.price && !/price/.test(missing) },
+      { label: "A reason to trust it", ok: (content.trustSignals.length > 0 || content.testimonials.length > 0 || !!content.proofSection) && !/trust|review|testimonial|rating|proof/.test(missing) },
+      { label: "A reason to buy today", ok: (content.hasUrgency || content.hasOffer) && !/urgency|offer|deadline/.test(missing) },
+    ];
+  }
   return [
     { label: "A clear headline", ok: !!content.heroHeadline && !/headline|value prop/.test(missing) },
     { label: "A call-to-action button", ok: content.ctas.length > 0 && !/call-to-action|\bcta\b|book(ing)? button|enquiry button/.test(missing) },

@@ -33,6 +33,16 @@ export type SiteContent = {
   pages: Record<"about" | "services" | "pricing" | "faq" | "blog" | "caseStudies" | "contact" | "booking" | "gallery", boolean>;
   hasOffer: boolean;
   hasLeadMagnet: boolean;
+  siteType: "store" | "business";
+  // Heading of a testimonials / results section (video or screenshot
+  // testimonials often have no quotable text).
+  proofSection: string | null;
+  hasFaq: boolean;
+  hasDemoVideo: boolean;
+  hasGuarantee: boolean;
+  hasUrgency: boolean;
+  hasPaymentBadges: boolean;
+  price: string | null;
 };
 
 export type FunnelStageId = "tof" | "mof" | "bof";

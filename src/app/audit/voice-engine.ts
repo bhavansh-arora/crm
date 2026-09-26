@@ -1,10 +1,14 @@
-import { depthFactor, voiceMix, type VoiceSettings } from "./voices";
+import { voiceMix, type VoiceSettings } from "./voices";
 
 // Thin client for public/voice/voice-worker.js — our in-browser narration
 // engine. One shared worker per tab; the model is downloaded once and then
 // served from the browser cache on later visits.
 
-type Pending = { resolve: (s: Float32Array<ArrayBuffer>) => void; reject: (e: Error) => void };
+// When each sentence is spoken, in seconds from the start of the clip.
+export type SpeechSegment = { text: string; start: number; end: number };
+export type Speech = { samples: Float32Array<ArrayBuffer>; segments: SpeechSegment[] };
+
+type Pending = { resolve: (s: Speech) => void; reject: (e: Error) => void };
 
 let worker: Worker | null = null;
 let nextId = 1;
@@ -24,7 +28,7 @@ function getWorker(): Worker {
     if (m.type === "progress") progressListeners.forEach((l) => l(m.total ? m.loaded / m.total : 0));
     else if (m.type === "ready") readyResolve?.();
     else if (m.type === "audio") {
-      pending.get(m.id)?.resolve(m.samples);
+      pending.get(m.id)?.resolve({ samples: m.samples, segments: m.segments ?? [] });
       pending.delete(m.id);
     } else if (m.type === "error") {
       const err = new Error(m.message || "Voice engine error");
@@ -66,13 +70,11 @@ export function loadVoiceEngine(onProgress?: (fraction: number) => void): Promis
   });
 }
 
-export async function synthesize(text: string, settings: VoiceSettings): Promise<Float32Array<ArrayBuffer>> {
+export async function synthesize(text: string, settings: VoiceSettings): Promise<Speech> {
   await loadVoiceEngine();
   const id = nextId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    // Synthesise faster by the depth factor; playing it back at that rate
-    // (see VideoStudio) lowers the pitch and restores the chosen pace.
-    getWorker().postMessage({ type: "speak", id, text, voice: { mix: voiceMix(settings) }, speed: settings.speed / depthFactor(settings) });
+    getWorker().postMessage({ type: "speak", id, text, voice: { mix: voiceMix(settings) }, speed: settings.speed });
   });
 }

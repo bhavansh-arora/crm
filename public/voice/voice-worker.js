@@ -1,9 +1,9 @@
 // In-house narration voice engine, running entirely in the browser.
 //
 // Uses the open-weight Kokoro-82M text-to-speech model (Apache-2.0) via
-// transformers.js. Our voices ("Aarohi", "Arjun") are custom blends of
-// Kokoro's Hindi speaker styles, which speak English with a natural Indian
-// accent, optionally mixed with a British speaker for extra clarity. No
+// transformers.js. Our voices (see src/app/audit/voices.ts) are custom
+// blends of Kokoro's Hindi speaker styles, which give English a natural
+// Indian accent, with its most natural-sounding voices for warmth. No
 // third-party voice API, no per-use cost: the model (~90 MB) downloads once
 // and is cached by the browser.
 //
@@ -11,7 +11,7 @@
 //               { type: "speak", id, text, voice: { mix: [[name, weight], ...] }, speed }
 // Messages out: { type: "progress", loaded, total }  (model download)
 //               { type: "ready", device }
-//               { type: "audio", id, samples: Float32Array, sampleRate }
+//               { type: "audio", id, samples: Float32Array, sampleRate, segments: [{ text, start, end }] }
 //               { type: "error", id?, message }
 
 const TRANSFORMERS_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js";
@@ -121,12 +121,22 @@ function normalize(text) {
     .trim();
 }
 
+// Split on sentence-ending punctuation followed by a space (so "site.com"
+// or "3.5" stay intact), merging very short fragments so prosody stays natural.
 function splitSentences(text) {
-  const parts = text.match(/[^.!?]+[.!?]+["')]*|[^.!?]+$/g) || [text];
-  // Merge very short fragments so prosody stays natural.
+  const parts = [];
+  let buf = "";
+  for (let i = 0; i < text.length; i++) {
+    buf += text[i];
+    if (/[.!?]/.test(text[i]) && (i + 1 >= text.length || /\s/.test(text[i + 1]))) {
+      parts.push(buf.trim());
+      buf = "";
+    }
+  }
+  if (buf.trim()) parts.push(buf.trim());
   const out = [];
-  for (const p of parts.map((s) => s.trim()).filter(Boolean)) {
-    if (out.length && (out[out.length - 1].length < 25 || p.length < 12)) out[out.length - 1] += " " + p;
+  for (const p of parts.filter(Boolean)) {
+    if (out.length && (out[out.length - 1].length < 18 || p.length < 10)) out[out.length - 1] += " " + p;
     else out.push(p);
   }
   return out;
@@ -144,33 +154,46 @@ async function blendedStyle(mix, tokenCount) {
   return style;
 }
 
+// People don't speak every sentence at the same speed; a small, repeatable
+// variation keeps the delivery lively instead of metronomic.
+const PACE_VARIATION = [0, 0.03, -0.02, 0.025, -0.015, 0.01];
+
 async function speak({ id, text, voice, speed }) {
   const { tf, phonemize, model, tokenizer } = await loadEngine();
   const pieces = [];
-  // A deliberate pause between sentences reads as calm and authoritative.
-  const gap = new Float32Array(Math.round(SAMPLE_RATE * 0.34));
-  for (const sentence of splitSentences(normalize(text))) {
+  const segments = [];
+  const gap = new Float32Array(Math.round(SAMPLE_RATE * 0.16));
+  let cursor = 0;
+  const sentences = splitSentences(text);
+  for (let i = 0; i < sentences.length; i++) {
+    const sentence = sentences[i];
     // "en" = British-style espeak phonemes; Indian English is non-rhotic, so
     // this pairs better with the Hindi speaker styles than en-us does.
-    const phonemes = (await phonemize(sentence, "en")).join(" ").replace(/r/g, "ɹ").replace(/x/g, "k").replace(/ʲ/g, "j");
+    const phonemes = (await phonemize(normalize(sentence), "en")).join(" ").replace(/r/g, "ɹ").replace(/x/g, "k").replace(/ʲ/g, "j");
     const { input_ids } = tokenizer(phonemes, { truncation: true });
     const style = await blendedStyle(voice.mix, input_ids.dims.at(-1));
+    const pace = (speed ?? 1) * (1 + PACE_VARIATION[i % PACE_VARIATION.length]);
     const { waveform } = await model({
       input_ids,
       style: new tf.Tensor("float32", style, [1, STYLE_DIM]),
-      speed: new tf.Tensor("float32", [speed ?? 1], [1]),
+      speed: new tf.Tensor("float32", [pace], [1]),
     });
-    if (pieces.length) pieces.push(gap);
+    if (pieces.length) {
+      pieces.push(gap);
+      cursor += gap.length;
+    }
+    // Exact timing of each spoken sentence, so captions can follow the voice.
+    segments.push({ text: sentence, start: cursor / SAMPLE_RATE, end: (cursor + waveform.data.length) / SAMPLE_RATE });
     pieces.push(waveform.data);
+    cursor += waveform.data.length;
   }
-  const length = pieces.reduce((s, p) => s + p.length, 0);
-  const samples = new Float32Array(length);
+  const samples = new Float32Array(cursor);
   let o = 0;
   for (const p of pieces) {
     samples.set(p, o);
     o += p.length;
   }
-  self.postMessage({ type: "audio", id, samples, sampleRate: SAMPLE_RATE }, [samples.buffer]);
+  self.postMessage({ type: "audio", id, samples, sampleRate: SAMPLE_RATE, segments }, [samples.buffer]);
 }
 
 // Process one request at a time — the model isn't re-entrant.

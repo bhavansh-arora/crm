@@ -8,7 +8,13 @@ import type { VideoScene } from "@/lib/site-audit/types";
 export const VIDEO_W = 1280;
 export const VIDEO_H = 720;
 
-export type TimedScene = VideoScene & { start: number; duration: number };
+export type TimedScene = VideoScene & {
+  start: number;
+  duration: number;
+  // When the narration was synthesised: where it starts in the scene, and
+  // when each sentence is spoken (relative to that start).
+  speech?: { lead: number; segments: { text: string; start: number; end: number }[] };
+};
 
 export type RenderInput = {
   scenes: TimedScene[];
@@ -18,7 +24,7 @@ export type RenderInput = {
   headline: { current: string; rewrite: string; problems: string[] };
   funnel: { id: "tof" | "mof" | "bof"; name: string; goal: string; score: number; line: string }[];
   biggestLeak: "tof" | "mof" | "bof";
-  proof: { quotes: string[]; trust: string[]; points: string[] };
+  proof: { quotes: string[]; trust: string[]; points: string[]; sectionTitle: string | null };
   domain: string;
   score: number;
   grade: string;
@@ -174,19 +180,47 @@ function scoreRing(ctx: CanvasRenderingContext2D, f: RenderInput["fonts"], cx: n
   spaced(ctx, sub, cx - spacedWidth(ctx, sub, 2) / 2, cy + r * 0.62, 2);
 }
 
-function subtitles(ctx: CanvasRenderingContext2D, f: RenderInput["fonts"], narration: string, progress: number) {
-  const words = narration.split(/\s+/).filter(Boolean);
-  if (!words.length) return;
-  const chunkSize = 12;
-  const chunkCount = Math.ceil(words.length / chunkSize);
-  const ci = Math.min(chunkCount - 1, Math.floor(progress * chunkCount));
-  const chunk = words.slice(ci * chunkSize, ci * chunkSize + chunkSize);
-  // Words already "spoken" in this chunk are bright; the rest are dimmed.
-  const within = progress * chunkCount - ci;
-  const spoken = Math.floor(within * chunk.length * 1.05);
+type TimedWord = { word: string; at: number };
+type CaptionChunk = TimedWord[];
+
+// Caption lines for a scene, each word stamped with when it is spoken.
+// With real narration we use the exact sentence timings from the voice
+// engine; inside a sentence, time is spread by word length (plus a beat at
+// commas), which tracks natural speech closely.
+function captionChunks(scene: TimedScene): CaptionChunk[] {
+  const segments = scene.speech
+    ? scene.speech.segments.map((sg) => ({ text: sg.text, start: sg.start + scene.speech!.lead, end: sg.end + scene.speech!.lead }))
+    : [{ text: scene.narration, start: 0.35, end: Math.max(0.5, scene.duration - 0.5) }];
+  const chunks: CaptionChunk[] = [];
+  for (const sg of segments) {
+    const words = sg.text.split(/\s+/).filter(Boolean);
+    if (!words.length) continue;
+    const weights = words.map((w) => w.length + 1 + (/[,;:]$/.test(w) ? 3 : 0) + (/[.!?]$/.test(w) ? 2 : 0));
+    const total = weights.reduce((a, b) => a + b, 0);
+    let acc = 0;
+    const timed = words.map((word, i) => {
+      // Light each word ~0.15s early: reading a word as it's heard feels in
+      // sync, while trailing the voice feels laggy.
+      const at = sg.start + ((sg.end - sg.start) * acc) / total - 0.15;
+      acc += weights[i];
+      return { word, at };
+    });
+    const n = Math.ceil(timed.length / 12);
+    const size = Math.ceil(timed.length / n);
+    for (let i = 0; i < timed.length; i += size) chunks.push(timed.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function subtitles(ctx: CanvasRenderingContext2D, f: RenderInput["fonts"], scene: TimedScene, local: number) {
+  const chunks = captionChunks(scene);
+  if (!chunks.length) return;
+  let ci = 0;
+  for (let i = 0; i < chunks.length; i++) if (chunks[i][0].at <= local) ci = i;
+  const chunk = chunks[ci];
 
   ctx.font = `400 23px ${f.body}`;
-  const lines = wrapLines(ctx, chunk.join(" "), 1000).slice(0, 2);
+  const lines = wrapLines(ctx, chunk.map((w) => w.word).join(" "), 1000).slice(0, 2);
   const lh = 32;
   const h = lines.length * lh + 22;
   const y = VIDEO_H - 30 - h;
@@ -203,7 +237,8 @@ function subtitles(ctx: CanvasRenderingContext2D, f: RenderInput["fonts"], narra
     const lw = ctx.measureText(line).width;
     let x = (VIDEO_W - lw) / 2;
     for (const word of line.split(" ")) {
-      ctx.fillStyle = wordIdx < spoken ? IVORY : "rgba(250,248,243,0.42)";
+      const spoken = (chunk[wordIdx]?.at ?? Infinity) <= local;
+      ctx.fillStyle = spoken ? IVORY : "rgba(250,248,243,0.42)";
       ctx.fillText(word, x, y + 34 + li * lh);
       x += ctx.measureText(word + " ").width;
       wordIdx++;
@@ -596,6 +631,26 @@ function drawProof(ctx: CanvasRenderingContext2D, input: RenderInput, scene: Tim
     ctx.fillStyle = "#64748b";
     ctx.font = `600 12px ${f.body}`;
     spaced(ctx, "FOUND ON YOUR WEBSITE", cardX + 44, cardY + cardH - 36, 2.2);
+  } else if (input.proof.sectionTitle) {
+    // Proof exists as videos/screenshots, but there's nothing a buyer can quickly read.
+    ctx.setLineDash([10, 8]);
+    ctx.strokeStyle = "rgba(224,169,59,0.75)";
+    ctx.lineWidth = 2;
+    roundRect(ctx, cardX, cardY, cardW, cardH, 18);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "rgba(224,169,59,0.9)";
+    ctx.font = `600 12px ${f.body}`;
+    spaced(ctx, "RESULTS SECTION FOUND", cardX + 44, cardY + 60, 2.2);
+    ctx.fillStyle = IVORY;
+    ctx.font = `italic 500 26px ${f.display}`;
+    const after = drawWrapped(ctx, `\u201C${input.proof.sectionTitle}\u201D`, cardX + 44, cardY + 108, cardW - 88, 36, 3);
+    ctx.fillStyle = "rgba(250,248,243,0.7)";
+    ctx.font = `400 18px ${f.body}`;
+    let yy = drawWrapped(ctx, "Videos and screenshots — good, but slow to take in.", cardX + 44, after + 24, cardW - 88, 27, 2);
+    ctx.fillStyle = "#ffb86b";
+    ctx.font = `600 19px ${f.body}`;
+    yy = drawWrapped(ctx, "Missing: written reviews with real names a buyer can read in seconds.", cardX + 44, yy + 18, cardW - 88, 28, 3);
   } else {
     ctx.setLineDash([10, 8]);
     ctx.strokeStyle = "rgba(229,72,77,0.7)";
@@ -1008,7 +1063,7 @@ export function renderFrame(ctx: CanvasRenderingContext2D, input: RenderInput, t
     ctx.fillRect(0, 0, VIDEO_W, VIDEO_H);
   }
 
-  subtitles(ctx, input.fonts, scene.narration, clamp(local / scene.duration, 0, 0.999));
+  subtitles(ctx, input.fonts, scene, local);
 
   // Hairline progress
   ctx.fillStyle = "rgba(250,248,243,0.08)";
@@ -1019,5 +1074,5 @@ export function renderFrame(ctx: CanvasRenderingContext2D, input: RenderInput, t
 
 export function estimateDuration(narration: string): number {
   const words = narration.split(/\s+/).filter(Boolean).length;
-  return Math.max(4.5, words / 2.5 + 1.4);
+  return Math.max(4, words / 2.8 + 1.2);
 }

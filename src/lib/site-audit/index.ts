@@ -37,19 +37,20 @@ export function templateScript(
   const weakest = [...funnel].sort((a, b) => a.score - b.score)[0];
   const missingBof = funnel.find((f) => f.id === "bof")!.items.filter((i) => i.status === "no").map((i) => i.label.toLowerCase());
   const short = (t: string, n = 70) => (t.length > n ? t.slice(0, n - 1) + "…" : t);
+  const store = content.siteType === "store";
 
   const scenes: VideoScene[] = [
     {
       kind: "intro",
       title: "An honest look at what's costing you customers",
-      narration: `This is a review of ${domain}. We examined it the way your customers experience it: on their phones, on Google, and at the moment they decide whether to contact you. It scores ${overallScore} out of 100. Here is what that means.`,
+      narration: `So, I went through ${domain} the way your customers do. On their phone, on Google, and at that moment they decide whether to ${store ? "buy" : "contact you"} or not. It scored ${overallScore} out of 100. Let me show you why.`,
       focus: 0,
       bullets: [],
     },
     {
       kind: "mobile",
       title: "The first three seconds on a phone",
-      narration: `Most of your visitors arrive on a mobile phone. This is exactly what they see before they scroll. In these first three seconds, a visitor must understand what you offer and how to reach you. ${missingBof.includes("tap-to-call") ? "Right now, there is no one-tap way to call you." : "Every element on this screen has to earn its place."}`,
+      narration: `Most of your visitors are on their phone. And this is exactly what they see before they scroll. You've got about three seconds here. Do they get what you offer, and how to reach you? ${missingBof.includes("tap-to-call") ? (store ? "The buy button is right there, and that's good. But is there a reason to trust you before they scroll?" : "Right now, they can't even call you in one tap.") : "Every bit of this screen has to earn its place."}`,
       focus: 0,
       bullets: [],
     },
@@ -57,8 +58,8 @@ export function templateScript(
       kind: "headline",
       title: "Your headline",
       narration: content.heroHeadline
-        ? `Your main headline reads: ${short(content.heroHeadline, 90)}. A strong headline states who you help and the result you deliver, in under ten words. This one needs to work harder.`
-        : "Your homepage has no clear headline. A visitor lands and has to guess what you do. That is the fastest way to lose them.",
+        ? `Now look at your headline. ${short(content.heroHeadline, 90)}. Here's the thing: a great headline says who you help and what they get, in under ten words. This one needs to work a lot harder.`
+        : "Here's the first problem. There's no clear headline. Someone lands on your site and has to guess what you do. And when people have to guess, they leave.",
       focus: 0.02,
       currentHeadline: content.heroHeadline ?? "",
       rewrite: "",
@@ -67,16 +68,18 @@ export function templateScript(
     {
       kind: "funnel",
       title: "How the site converts visitors",
-      narration: `A website has three jobs. Top of funnel: get found and grab attention. Middle of funnel: build trust. Bottom of funnel: turn interest into an enquiry. Your weakest stage is the ${weakest.name.toLowerCase()}, scoring ${weakest.score} out of 100. That is where customers are leaking out.`,
+      narration: `Think of your website as a funnel. At the top, people find you. In the middle, they start to trust you. At the bottom, they ${store ? "buy" : "call or enquire"}. Your weakest spot is the ${weakest.name.toLowerCase()}, at just ${weakest.score} out of 100. That's where you're losing ${store ? "sales" : "customers"}.`,
       focus: 0.3,
       bullets: [],
     },
     {
       kind: "proof",
       title: "Proof that others trust you",
-      narration: content.testimonials.length
-        ? `You do have testimonials, and that matters. But they need to be specific, visible, and backed by real names and ratings. Ninety percent of customers read reviews before they buy.`
-        : "There are no testimonials on this page. Ninety percent of customers read reviews before they buy. Without proof, even a great business looks like a risk.",
+      narration: !content.testimonials.length && content.proofSection
+        ? "You've got a results section, with videos and screenshots. That's great. But there isn't one written review with a real name that a buyer can quickly read. And that's what tips a doubtful buyer over the edge."
+        : content.testimonials.length
+        ? `Good news, you do have testimonials. But they're easy to miss, and they don't have real names or ratings. And nine out of ten people check reviews before they buy. So let's make them count.`
+        : "Now, where's the proof? There isn't a single testimonial here. Nine out of ten people read reviews before they buy. Without them, even a great business looks like a gamble.",
       focus: 0.6,
       quote: content.testimonials[0] ?? "",
       bullets: [],
@@ -96,7 +99,7 @@ export function templateScript(
   scenes.push({
     kind: "outro",
     title: "Every one of these is fixable",
-    narration: `None of this is permanent. With a sharper headline, visible proof, and a clear way to enquire from any phone, ${domain} can turn far more of its visitors into paying customers.`,
+    narration: `And honestly? None of this is hard to fix. A sharper headline, real proof, and ${store ? "a reason to trust you before they scroll" : "one easy way to reach you from any phone"}. Do that, and ${domain} starts turning a lot more visitors into ${store ? "buyers" : "customers"}.`,
     focus: 1,
     bullets: [],
   });
