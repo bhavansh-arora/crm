@@ -134,6 +134,133 @@ function drawTriangle(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, s: 
   ctx.restore();
 }
 
+// Edge polylines are left corner → right corner; returns y at x.
+function edgeY(edge: Pt[], x: number): number {
+  for (let i = 1; i < edge.length; i++) {
+    if (x <= edge[i].x) {
+      const f = (x - edge[i - 1].x) / (edge[i].x - edge[i - 1].x || 1);
+      return edge[i - 1].y + (edge[i].y - edge[i - 1].y) * Math.max(0, Math.min(1, f));
+    }
+  }
+  return edge[edge.length - 1].y;
+}
+
+// Upper teeth from the centre outwards: [width as a share of the half-mouth,
+// relative length, pointedness]. They get narrower and darker towards the
+// corners because the dental arch curves away from the viewer.
+const UPPER_TEETH: [number, number, number][] = [
+  [0.27, 1, 0], // central incisor
+  [0.2, 0.86, 0], // lateral incisor
+  [0.17, 0.9, 0.45], // canine
+  [0.14, 0.74, 0.15], // premolar (mostly in shadow)
+];
+const LOWER_TEETH: [number, number, number][] = [
+  [0.2, 1, 0],
+  [0.19, 0.95, 0],
+  [0.18, 0.9, 0.35],
+];
+
+function toothPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, point: number, down: boolean) {
+  // A rectangle whose free edge is rounded (and slightly pointed for canines).
+  const r = Math.min(w * 0.42, h * 0.5);
+  const dir = down ? 1 : -1;
+  const tip = y + dir * h;
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, tip - dir * r);
+  ctx.quadraticCurveTo(x + w, tip, x + w - r, tip + dir * point * r * 0.3);
+  ctx.lineTo(x + w / 2, tip + dir * point * r * 0.6);
+  ctx.lineTo(x + r, tip + dir * point * r * 0.3);
+  ctx.quadraticCurveTo(x, tip, x, tip - dir * r);
+  ctx.closePath();
+}
+
+function drawTeethRow(
+  ctx: CanvasRenderingContext2D,
+  edge: Pt[],
+  midX: number,
+  halfW: number,
+  height: number,
+  teeth: [number, number, number][],
+  down: boolean,
+  tone: number
+) {
+  // Scale the arch so it reaches ~80% of the way to the mouth corners.
+  const total = teeth.reduce((a, [w]) => a + w, 0);
+  const k = (halfW * 0.8) / total;
+  for (const side of [-1, 1]) {
+    let offset = 0;
+    teeth.forEach(([w, len, point], i) => {
+      const tw = w * k;
+      const x = side < 0 ? midX - offset - tw : midX + offset;
+      offset += tw;
+      const cx = x + tw / 2;
+      const y = edgeY(edge, cx) + (down ? -0.5 : 0.5);
+      const h = height * len;
+      const depth = 1 - (i / teeth.length) * 0.5; // farther teeth are in shadow
+      const g = ctx.createLinearGradient(0, y, 0, y + (down ? h : -h));
+      const c = (v: number) => Math.round(v * depth * tone);
+      // Warm ivory, slightly translucent at the biting edge like real enamel.
+      g.addColorStop(0, `rgb(${c(206)},${c(194)},${c(178)})`);
+      g.addColorStop(0.45, `rgb(${c(226)},${c(217)},${c(200)})`);
+      g.addColorStop(0.85, `rgb(${c(214)},${c(205)},${c(190)})`);
+      g.addColorStop(1, `rgb(${c(176)},${c(168)},${c(160)})`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      toothPath(ctx, x, y, tw, h, point, down);
+      ctx.fill();
+      // A faint seam where neighbouring teeth meet — no dark gaps.
+      ctx.strokeStyle = `rgba(120,92,80,${0.16 * depth})`;
+      ctx.lineWidth = Math.max(0.4, tw * 0.025);
+      ctx.stroke();
+    });
+  }
+}
+
+function drawMouthInterior(ctx: CanvasRenderingContext2D, topEdge: Pt[], bottomEdge: Pt[], mouthW: number, open: number) {
+  const left = topEdge[0];
+  const right = topEdge[topEdge.length - 1];
+  const midX = (left.x + right.x) / 2;
+  const halfW = (right.x - left.x) / 2;
+  const top = Math.min(...topEdge.map((p) => p.y));
+  const bottom = Math.max(...bottomEdge.map((p) => p.y));
+  const gap = bottom - top;
+
+  // Tongue, low in the mouth.
+  const tongueY = edgeY(bottomEdge, midX) - gap * 0.18;
+  const tg = ctx.createRadialGradient(midX, tongueY - gap * 0.1, 1, midX, tongueY, halfW * 0.7);
+  tg.addColorStop(0, "rgba(176,84,82,0.95)");
+  tg.addColorStop(1, "rgba(110,40,40,0.9)");
+  ctx.fillStyle = tg;
+  ctx.beginPath();
+  ctx.ellipse(midX, tongueY + gap * 0.2, halfW * 0.62, Math.max(1, gap * 0.42), 0, Math.PI, 0);
+  ctx.fill();
+
+  // Lower teeth only show once the jaw is well open.
+  if (open > 0.45) {
+    const lh = Math.min(gap * 0.18, mouthW * 0.05) * Math.min(1, (open - 0.45) / 0.35);
+    drawTeethRow(ctx, bottomEdge, midX, halfW * 0.7, lh, LOWER_TEETH, false, 0.78);
+  }
+
+  // Upper teeth hang from under the upper lip.
+  const uh = Math.min(gap * 0.6, mouthW * 0.11);
+  drawTeethRow(ctx, topEdge, midX, halfW, uh, UPPER_TEETH, true, 1);
+
+  // Shadow from the upper lip onto the teeth, and darker mouth corners.
+  const sh = ctx.createLinearGradient(0, top, 0, top + uh * 0.55);
+  sh.addColorStop(0, "rgba(40,14,12,0.55)");
+  sh.addColorStop(1, "rgba(40,14,12,0)");
+  ctx.fillStyle = sh;
+  ctx.fillRect(left.x, top - 1, right.x - left.x, uh * 0.55 + 1);
+  for (const c of [left, right]) {
+    const cg = ctx.createRadialGradient(c.x, (top + bottom) / 2, 0, c.x, (top + bottom) / 2, halfW * 0.45);
+    cg.addColorStop(0, "rgba(18,5,5,0.85)");
+    cg.addColorStop(1, "rgba(18,5,5,0)");
+    ctx.fillStyle = cg;
+    ctx.fillRect(c.x - halfW * 0.45, top - 2, halfW * 0.9, gap + 4);
+  }
+}
+
 export function drawTalkingPhoto(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -208,33 +335,9 @@ export function drawTalkingPhoto(
   ctx.fillStyle = grad;
   ctx.fill();
   ctx.clip();
-  // Upper teeth: a soft, shaded band just under the upper lip, a little
-  // narrower than the mouth (teeth don't reach the corners).
-  const teethH = Math.min((bottom - top) * 0.26, P.mouthWidth * Math.hypot(F.a, F.b) * 0.065);
-  const midX = (topEdge[0].x + topEdge[topEdge.length - 1].x) / 2;
-  const teethEdge = topEdge.slice(1, -1).map((p) => ({ x: midX + (p.x - midX) * 0.86, y: p.y }));
-  if (teethEdge.length > 1 && teethH > 0.6) {
-    const tg = ctx.createLinearGradient(0, top, 0, top + teethH);
-    tg.addColorStop(0, "rgba(120,96,86,0.55)");
-    tg.addColorStop(0.35, "rgba(226,218,204,0.82)");
-    tg.addColorStop(1, "rgba(196,184,170,0.7)");
-    ctx.fillStyle = tg;
-    ctx.beginPath();
-    teethEdge.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
-    [...teethEdge].reverse().forEach((p, i, arr) => {
-      // Rounded ends: shorter at the sides.
-      const u = arr.length > 1 ? Math.abs(i / (arr.length - 1) - 0.5) * 2 : 0;
-      ctx.lineTo(p.x, p.y + teethH * (1 - u * u * 0.6));
-    });
-    ctx.closePath();
-    ctx.fill();
-  }
-  // Tongue
-  const mid = toDest({ x: P.mouthCenter, y: P.seamAt(P.mouthCenter) + O * 0.8 });
-  ctx.fillStyle = "rgba(150,62,60,0.75)";
-  ctx.beginPath();
-  ctx.ellipse(mid.x, mid.y, P.halfMouth * F.a * 0.55, Math.max(1, O * F.a * 0.3), 0, 0, Math.PI * 2);
-  ctx.fill();
+  // Teeth, tongue and depth: drawn in mouth-space so they scale with this
+  // face's mouth and follow the lips as they move.
+  drawMouthInterior(ctx, topEdge, bottomEdge, P.mouthWidth * Math.hypot(F.a, F.b), open);
   ctx.restore();
 
   // 3. The warped lower face on top.
