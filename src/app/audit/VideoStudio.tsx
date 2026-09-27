@@ -5,11 +5,9 @@ import { mobileChecklist } from "@/lib/site-audit/checklist";
 import type { AuditReport, VideoScene } from "@/lib/site-audit/types";
 import { BODY_FONT, DISPLAY_FONT } from "./fonts";
 import { renderAmbientMusic } from "./music";
-import { estimateDuration, renderFrame, VIDEO_H, VIDEO_W, type RenderInput, type TimedScene } from "./video-renderer";
+import { estimateDuration, HOOK, renderFrame, VIDEO_H, VIDEO_W, type RenderInput, type TimedScene } from "./video-renderer";
 import { loadVoiceEngine, synthesize, VOICE_SAMPLE_RATE, type SpeechSegment } from "./voice-engine";
-import { detectFace, type FaceGeometry } from "./face-landmarks";
-import { ENVELOPE_RATE, loudnessEnvelope, type Presenter } from "./presenter";
-import { DEFAULT_VOICE_SETTINGS, voicePreset, VOICES, type VoiceSettings } from "./voices";
+import { DEFAULT_VOICE_SETTINGS, VOICES, type VoiceSettings } from "./voices";
 
 type Mode = "idle" | "preview" | "recording";
 type VoiceStatus =
@@ -42,9 +40,11 @@ const settingsKey = (s: VoiceSettings) => `${s.voice}|${s.accent.toFixed(2)}|${s
 // Narration starts this long into each scene (after the crossfade), and the
 // captions use the same offset so they track the voice exactly.
 const SPEECH_LEAD = 0.55;
+// The intro opens on a silent kinetic hook before the narrator starts.
+const leadFor = (s: VideoScene) => SPEECH_LEAD + (s.kind === "intro" ? HOOK : 0);
 const SPEECH_TAIL = 0.6;
 
-type Narration = { buffer: AudioBuffer; segments: SpeechSegment[]; envelope: Float32Array };
+type Narration = { buffer: AudioBuffer; segments: SpeechSegment[] };
 
 // Closing call-to-action, added after the report's own scenes.
 function ctaScene(agencyName: string, points: string[]): VideoScene {
@@ -73,6 +73,18 @@ function Slider({ label, value, min, max, step, left, right, onChange }: {
   );
 }
 
+
+// The opening line of the video: one concrete, attention-grabbing claim.
+function hookLine(report: AuditReport): string {
+  // Count what the video will actually walk through, so the hook matches the narration.
+  const issueScenes = report.videoScript.filter((s) => s.kind === "issue").length;
+  const problems = issueScenes || report.categories.flatMap((c) => c.checks).filter((c) => c.status === "fail").length;
+  const bare = report.domain.replace(/^www\./, "").replace(/\.[a-z.]+$/, "");
+  const name = bare.charAt(0).toUpperCase() + bare.slice(1);
+  const loss = report.content.siteType === "store" ? "sales" : "customers";
+  return problems >= 2 ? `${problems} things are quietly costing ${name} ${loss}` : `Is ${name} losing ${loss}? Let's find out.`;
+}
+
 export default function VideoStudio({ report }: { report: AuditReport }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scenes, setScenes] = useState<VideoScene[]>(report.videoScript);
@@ -80,10 +92,6 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   const [mobileImage, setMobileImage] = useState<HTMLImageElement | null>(null);
   const [fontsReady, setFontsReady] = useState(0);
   const [agencyName, setAgencyName] = useState("");
-  const [presenterName, setPresenterName] = useState("");
-  const [presenterPhoto, setPresenterPhoto] = useState<{ img: HTMLImageElement; face: FaceGeometry } | null>(null);
-  const [photoStatus, setPhotoStatus] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
-  const [showPresenter, setShowPresenter] = useState(true);
   const [includeCta, setIncludeCta] = useState(true);
   const [agencyContact, setAgencyContact] = useState("");
   const [voice, setVoice] = useState<VoiceSettings>(DEFAULT_VOICE_SETTINGS);
@@ -100,23 +108,14 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   const [sampling, setSampling] = useState(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const musicRef = useRef<{ duration: number; buffer: AudioBuffer } | null>(null);
+  const musicRef = useRef<{ duration: number; key: string; buffer: AudioBuffer } | null>(null);
   const stopRef = useRef<(() => void) | null>(null);
 
   const fonts = useMemo(() => ({ display: DISPLAY_FONT, body: BODY_FONT }), []);
 
   useEffect(() => {
     setAgencyName(loadPref("audit.agencyName", ""));
-    setPresenterName(loadPref("audit.presenterName", ""));
-    setShowPresenter(loadPref("audit.showPresenter", true));
     setIncludeCta(loadPref("audit.includeCta", true));
-    const photo = loadPref<string>("audit.presenterPhoto", "");
-    const face = loadPref<FaceGeometry | null>("audit.presenterFace", null);
-    if (photo && face) {
-      const img = new Image();
-      img.onload = () => setPresenterPhoto({ img, face });
-      img.src = photo;
-    }
     setAgencyContact(loadPref("audit.agencyContact", ""));
     // Merge so settings saved before a new option existed pick up its default.
     // Settings saved for a voice that no longer exists fall back to the defaults.
@@ -171,24 +170,13 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     let start = 0;
     return videoScenes.map((s) => {
       const n = includeVoice ? voiceBuffers.get(`${vKey}|${s.narration}`) : undefined;
-      const duration = n ? SPEECH_LEAD + n.buffer.duration + SPEECH_TAIL : estimateDuration(s.narration);
-      const t: TimedScene = { ...s, start, duration, speech: n ? { lead: SPEECH_LEAD, segments: n.segments } : undefined };
+      const duration = n ? leadFor(s) + n.buffer.duration + SPEECH_TAIL : estimateDuration(s.narration, s.kind);
+      const t: TimedScene = { ...s, start, duration, speech: n ? { lead: leadFor(s), segments: n.segments } : undefined };
       start += duration;
       return t;
     });
   }, [videoScenes, voiceBuffers, vKey, includeVoice]);
   const total = timed.length ? timed[timed.length - 1].start + timed[timed.length - 1].duration : 0;
-
-  // Narration loudness over the whole timeline, for the presenter's lip-sync.
-  function levelFn(sceneList: (TimedScene & { envelope?: Float32Array })[]) {
-    return (t: number) => {
-      const sc = sceneList.find((x) => t >= x.start && t < x.start + x.duration);
-      const env = sc?.envelope;
-      if (!sc || !env) return 0;
-      const i = Math.floor((t - sc.start - SPEECH_LEAD) * ENVELOPE_RATE);
-      return i >= 0 && i < env.length ? env[i] : 0;
-    };
-  }
 
   const renderInput: RenderInput = useMemo(() => {
     const content = report.content;
@@ -203,16 +191,6 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     };
     return {
       scenes: timed,
-      presenter:
-        showPresenter && presenterPhoto
-          ? ({
-              name: presenterName.trim() || voicePreset(voice.voice).name,
-              caption: agencyName.trim(),
-              photo: presenterPhoto.img,
-              face: presenterPhoto.face,
-              levelAt: () => 0,
-            } satisfies Presenter)
-          : null,
       screenshot: image,
       mobileShot: mobileImage,
       mobileChecklist: mobileChecklist(report),
@@ -239,6 +217,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
           "Feature one strong customer story",
         ],
       },
+      hook: hookLine(report),
       domain: report.domain,
       score: report.overallScore,
       grade: report.grade,
@@ -247,7 +226,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
       outroPoints,
       fonts,
     };
-  }, [timed, image, mobileImage, report, agencyName, agencyContact, fonts, outroPoints, showPresenter, presenterName, presenterPhoto, voice.voice]);
+  }, [timed, image, mobileImage, report, agencyName, agencyContact, fonts, outroPoints]);
 
   useEffect(() => {
     if (mode !== "idle") return;
@@ -296,45 +275,6 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     return buf;
   }
 
-  // A real photo becomes the presenter: we find the face (lips, jaw, eyes)
-  // once, so it can lip-sync to the narration.
-  function onPhoto(file: File | undefined) {
-    if (!file) return;
-    setPhotoStatus({ busy: true, error: null });
-    const reader = new FileReader();
-    reader.onload = () => {
-      const src = new Image();
-      src.onload = async () => {
-        // Keep it light to store and fast to draw, but sharp enough for the large CTA shot.
-        const scale = Math.min(1, 720 / Math.min(src.width, src.height));
-        const c = document.createElement("canvas");
-        c.width = Math.round(src.width * scale);
-        c.height = Math.round(src.height * scale);
-        c.getContext("2d")!.drawImage(src, 0, 0, c.width, c.height);
-        const url = c.toDataURL("image/jpeg", 0.88);
-        const img = new Image();
-        img.onload = async () => {
-          try {
-            const face = await detectFace(img);
-            if (!face) {
-              setPhotoStatus({ busy: false, error: "No face found — use a clear, front-facing photo with the mouth closed." });
-              return;
-            }
-            setPresenterPhoto({ img, face });
-            savePref("audit.presenterPhoto", url);
-            savePref("audit.presenterFace", face);
-            setPhotoStatus({ busy: false, error: null });
-          } catch (err) {
-            setPhotoStatus({ busy: false, error: err instanceof Error ? err.message : "Couldn't analyse the photo" });
-          }
-        };
-        img.src = url;
-      };
-      src.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
-  }
-
   function updateVoice(patch: Partial<VoiceSettings>) {
     const next = { ...voice, ...patch };
     setVoice(next);
@@ -381,7 +321,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
       for (const s of todo) {
         const speech = await synthesize(s.narration, voice);
         const buffer = toAudioBuffer(speech.samples);
-        next.set(`${vKey}|${s.narration}`, { buffer, segments: speech.segments, envelope: loudnessEnvelope(buffer) });
+        next.set(`${vKey}|${s.narration}`, { buffer, segments: speech.segments });
         done++;
         setVoiceStatus({ state: "generating", done, total: videoScenes.length });
       }
@@ -394,11 +334,12 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     }
   }
 
-  async function getMusic(duration: number): Promise<AudioBuffer | null> {
+  async function getMusic(duration: number, cues: number[]): Promise<AudioBuffer | null> {
     if (!includeMusic) return null;
-    if (musicRef.current && Math.abs(musicRef.current.duration - duration) < 0.5) return musicRef.current.buffer;
-    const buffer = await renderAmbientMusic(duration);
-    musicRef.current = { duration, buffer };
+    const key = cues.map((c) => c.toFixed(2)).join(",");
+    if (musicRef.current && Math.abs(musicRef.current.duration - duration) < 0.05 && musicRef.current.key === key) return musicRef.current.buffer;
+    const buffer = await renderAmbientMusic(duration, cues);
+    musicRef.current = { duration, key, buffer };
     return buffer;
   }
 
@@ -422,8 +363,8 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     let start = 0;
     const sceneTimes = videoScenes.map((s) => {
       const n = includeVoice ? buffers.get(`${vKey}|${s.narration}`) : undefined;
-      const duration = n ? SPEECH_LEAD + n.buffer.duration + SPEECH_TAIL : estimateDuration(s.narration);
-      const t = { ...s, start, duration, buf: n?.buffer, envelope: n?.envelope, speech: n ? { lead: SPEECH_LEAD, segments: n.segments } : undefined };
+      const duration = n ? leadFor(s) + n.buffer.duration + SPEECH_TAIL : estimateDuration(s.narration, s.kind);
+      const t = { ...s, start, duration, buf: n?.buffer, speech: n ? { lead: leadFor(s), segments: n.segments } : undefined };
       start += duration;
       return t;
     });
@@ -431,7 +372,6 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     const input: RenderInput = {
       ...renderInput,
       scenes: sceneTimes,
-      presenter: renderInput.presenter ? { ...renderInput.presenter, levelAt: levelFn(sceneTimes) } : null,
     };
     const haveVoice = includeVoice && sceneTimes.every((s) => s.buf);
 
@@ -443,7 +383,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
     if (record) setVideoUrl(null);
 
     await Promise.race([actx.resume(), new Promise((r) => setTimeout(r, 1500))]);
-    const music = await getMusic(runTotal);
+    const music = await getMusic(runTotal, sceneTimes.slice(1).map((s) => s.start));
     const dest = record ? actx.createMediaStreamDestination() : null;
     const cleanups: (() => void)[] = [];
     const t0 = actx.currentTime + 0.25;
@@ -470,7 +410,7 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
         }
       });
     };
-    if (haveVoice) sceneTimes.forEach((s) => schedule(s.buf!, t0 + s.start + SPEECH_LEAD, 1, true));
+    if (haveVoice) sceneTimes.forEach((s) => schedule(s.buf!, t0 + s.start + leadFor(s), 1, true));
     if (music) schedule(music, t0, MUSIC_GAIN);
 
     let recorder: MediaRecorder | null = null;
@@ -700,71 +640,6 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
                 className="h-4 w-4 accent-gold-500"
               />
             </label>
-          </div>
-
-          <div className="space-y-2">
-            <label className="flex items-center justify-between gap-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ivory/50">On-screen presenter</span>
-              <input
-                type="checkbox"
-                checked={showPresenter}
-                onChange={(e) => {
-                  setShowPresenter(e.target.checked);
-                  savePref("audit.showPresenter", e.target.checked);
-                }}
-                className="h-4 w-4 accent-gold-500"
-              />
-            </label>
-            {showPresenter && (
-              <>
-                <input
-                  value={presenterName}
-                  onChange={(e) => {
-                    setPresenterName(e.target.value);
-                    savePref("audit.presenterName", e.target.value);
-                  }}
-                  placeholder={`Presenter name (default: ${voicePreset(voice.voice).name})`}
-                  className="w-full rounded-lg bg-ink-900 px-3 py-2 text-sm text-ivory ring-1 ring-white/10 placeholder:text-ivory/30 focus:ring-gold-500/60"
-                />
-                <div className="flex items-center gap-3 text-xs">
-                  {presenterPhoto && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={presenterPhoto.img.src} alt="" className="h-11 w-11 rounded-full object-cover ring-2 ring-gold-500/60" />
-                  )}
-                  <label className="cursor-pointer rounded-full px-3 py-1.5 text-ivory/80 ring-1 ring-white/15 hover:bg-white/5">
-                    {photoStatus.busy ? "Finding face…" : presenterPhoto ? "Change photo" : "Upload presenter photo"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={photoStatus.busy}
-                      onChange={(e) => {
-                        onPhoto(e.target.files?.[0]);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                  {presenterPhoto && (
-                    <button
-                      onClick={() => {
-                        setPresenterPhoto(null);
-                        savePref("audit.presenterPhoto", "");
-                        savePref("audit.presenterFace", null);
-                      }}
-                      className="text-ivory/50 hover:text-ivory"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-                {photoStatus.error && <p className="text-[11px] leading-snug text-rose-300">{photoStatus.error}</p>}
-                <p className="text-[11px] leading-snug text-ivory/40">
-                  {presenterPhoto
-                    ? "Your photo lip-syncs to the narration."
-                    : "Upload a real, front-facing photo (mouth closed, good light). It will lip-sync to the narration."}
-                </p>
-              </>
-            )}
           </div>
 
           <div className="space-y-2">

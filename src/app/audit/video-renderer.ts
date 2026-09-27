@@ -1,5 +1,4 @@
 import type { VideoScene } from "@/lib/site-audit/types";
-import { drawPresenter, type Presenter } from "./presenter";
 
 // Draws one frame of the walkthrough video onto a 1280x720 canvas for a given
 // time `t` (seconds). Stateless per frame, so preview and recording are
@@ -30,7 +29,7 @@ export type RenderInput = {
   biggestLeak: "tof" | "mof" | "bof";
   proof: { quotes: string[]; trust: string[]; points: string[]; sectionTitle: string | null };
   serp: { title: string; description: string; url: string; hasSchema: boolean };
-  presenter: Presenter | null;
+  hook: string;
   domain: string;
   score: number;
   grade: string;
@@ -187,6 +186,8 @@ function scoreRing(ctx: CanvasRenderingContext2D, f: RenderInput["fonts"], cx: n
 }
 
 type TimedWord = { word: string; at: number };
+// Words worth a visual punch in the captions.
+const KEYWORD_RE = /\d|₹|%|^(never|no|nothing|zero|missing|losing|lost|lose|costing|free|every|only|biggest|fix|sales|customers|trust)\W*$/i;
 type CaptionChunk = TimedWord[];
 
 // Caption lines for a scene, each word stamped with when it is spoken.
@@ -194,7 +195,7 @@ type CaptionChunk = TimedWord[];
 // from the audio's actual pauses); otherwise time is estimated.
 const CAPTION_LEAD = 0.1; // light a word just before it's heard — trailing feels laggy
 function captionChunks(scene: TimedScene): CaptionChunk[] {
-  const lead = scene.speech?.lead ?? 0;
+  const lead = scene.speech?.lead ?? (scene.kind === "intro" ? HOOK : 0);
   const segments = scene.speech
     ? scene.speech.segments
     : [{ text: scene.narration, start: 0.35, end: Math.max(0.5, scene.duration - 0.5), words: undefined }];
@@ -236,7 +237,8 @@ function captionChunks(scene: TimedScene): CaptionChunk[] {
 
 function subtitles(ctx: CanvasRenderingContext2D, f: RenderInput["fonts"], scene: TimedScene, local: number) {
   const chunks = captionChunks(scene);
-  if (!chunks.length) return;
+  // Nothing until the first word is about to be spoken (e.g. during the hook).
+  if (!chunks.length || local < chunks[0][0].at - 0.3) return;
   let ci = 0;
   for (let i = 0; i < chunks.length; i++) if (chunks[i][0].at <= local) ci = i;
   const chunk = chunks[ci];
@@ -259,9 +261,22 @@ function subtitles(ctx: CanvasRenderingContext2D, f: RenderInput["fonts"], scene
     const lw = ctx.measureText(line).width;
     let x = (VIDEO_W - lw) / 2;
     for (const word of line.split(" ")) {
-      const spoken = (chunk[wordIdx]?.at ?? Infinity) <= local;
-      ctx.fillStyle = spoken ? IVORY : "rgba(250,248,243,0.42)";
-      ctx.fillText(word, x, y + 34 + li * lh);
+      const at = chunk[wordIdx]?.at ?? Infinity;
+      const spoken = at <= local;
+      const key = KEYWORD_RE.test(word);
+      ctx.fillStyle = spoken ? (key ? GOLD_SOFT : IVORY) : "rgba(250,248,243,0.42)";
+      if (key && spoken) {
+        // Punch key words (numbers, money, loss words) with a brief pop.
+        const pop = 1 + 0.14 * (1 - clamp((local - at) / 0.3, 0, 1));
+        const ww = ctx.measureText(word).width;
+        ctx.save();
+        ctx.translate(x + ww / 2, y + 34 + li * lh);
+        ctx.scale(pop, pop);
+        ctx.fillText(word, -ctx.measureText(word).width / 2, 0);
+        ctx.restore();
+      } else {
+        ctx.fillText(word, x, y + 34 + li * lh);
+      }
       x += ctx.measureText(word + " ").width;
       wordIdx++;
     }
@@ -695,8 +710,51 @@ function drawProof(ctx: CanvasRenderingContext2D, input: RenderInput, scene: Tim
   ctx.globalAlpha = 1;
 }
 
-function drawIntro(ctx: CanvasRenderingContext2D, input: RenderInput, scene: TimedScene, local: number) {
+// Opening hook: a bold, word-by-word statement in the first seconds, before
+// the title card — the part that decides whether someone keeps watching.
+export const HOOK = 2.8;
+
+function drawHook(ctx: CanvasRenderingContext2D, input: RenderInput, local: number) {
   const f = input.fonts;
+  screenshotBackdrop(ctx, input.screenshot, local);
+  ctx.fillStyle = "rgba(7,11,20,0.55)";
+  ctx.fillRect(0, 0, VIDEO_W, VIDEO_H);
+  ctx.font = `700 66px ${f.display}`;
+  const lines = wrapLines(ctx, input.hook, 1020);
+  const lh = 80;
+  const y0 = VIDEO_H / 2 - ((lines.length - 1) * lh) / 2 - 10;
+  let wi = 0;
+  lines.forEach((line, li) => {
+    const words = line.split(" ");
+    const lw = ctx.measureText(line).width;
+    let x = (VIDEO_W - lw) / 2;
+    for (const w of words) {
+      const p = easeOut(clamp((local - 0.15 - wi * 0.11) / 0.35, 0, 1));
+      const ww = ctx.measureText(w + " ").width;
+      ctx.save();
+      ctx.globalAlpha = p;
+      ctx.translate(x + ww / 2, y0 + li * lh);
+      ctx.scale(1.18 - 0.18 * p, 1.18 - 0.18 * p);
+      ctx.fillStyle = /\d/.test(w) ? GOLD : IVORY;
+      ctx.fillText(w, -ww / 2, 0);
+      ctx.restore();
+      x += ww;
+      wi++;
+    }
+  });
+  // Gold underline sweeps in under the last line.
+  const u = reveal(local, 0.2 + wi * 0.11, 0.6);
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(VIDEO_W / 2 - 90 * u, y0 + (lines.length - 1) * lh + 30, 180 * u, 3);
+}
+
+function drawIntro(ctx: CanvasRenderingContext2D, input: RenderInput, scene: TimedScene, fullLocal: number) {
+  const f = input.fonts;
+  if (fullLocal < HOOK) {
+    drawHook(ctx, input, fullLocal);
+    return;
+  }
+  const local = fullLocal - HOOK;
   screenshotBackdrop(ctx, input.screenshot, local);
 
   ctx.globalAlpha = reveal(local, 0.2);
@@ -865,11 +923,8 @@ function drawSerp(ctx: CanvasRenderingContext2D, input: RenderInput, x: number, 
 function drawCta(ctx: CanvasRenderingContext2D, input: RenderInput, scene: TimedScene, local: number, t: number) {
   const f = input.fonts;
   screenshotBackdrop(ctx, input.screenshot, local);
-  if (input.presenter) {
-    const pop = reveal(local, 0.1, 0.8);
-    drawPresenter(ctx, input.presenter, 300, 318, 165 * (0.92 + 0.08 * pop), t, f, { alpha: pop });
-  }
-  const x = input.presenter ? 540 : 150;
+  void t;
+  const x = 150;
   const w = 1180 - x;
   ctx.globalAlpha = reveal(local, 0.3);
   ctx.fillStyle = GOLD;
@@ -1019,11 +1074,26 @@ function drawBrowserScene(
     const scrollTarget = target(sectionTop(scene), sectionH);
     const scrollY = clamp(target(prevTop, 170) + (scrollTarget - target(prevTop, 170)) * move, 0, maxScroll);
     const offsetX = (viewW - img.width * scale) / 2;
-    ctx.drawImage(img, viewX + offsetX, viewY - scrollY, img.width * scale, pageH);
     bandTop = viewY + clamp(sectionTop(scene) - scrollY, 6, viewH - sectionH - 6);
     bandH = sectionH;
 
-    if (maxScroll > 0) {
+    // Camera push-in: once the section is spotlit, zoom towards it so the
+    // viewer reads exactly what's being discussed (never cropping the section).
+    const push = visual === "page" ? ease(clamp((local - 1.9) / 1.4, 0, 1)) : 0;
+    const z = 1 + push * (clamp((viewH - 70) / bandH, 1, 1.32) - 1);
+    const pivotX = viewX + viewW / 2;
+    const bandMid = bandTop + bandH / 2;
+    const screenMid = bandMid + (viewY + viewH / 2 - bandMid) * push;
+    ctx.save();
+    ctx.translate(pivotX, screenMid);
+    ctx.scale(z, z);
+    ctx.translate(-pivotX, -bandMid);
+    ctx.drawImage(img, viewX + offsetX, viewY - scrollY, img.width * scale, pageH);
+    ctx.restore();
+    bandTop = screenMid - (bandH * z) / 2;
+    bandH *= z;
+
+    if (maxScroll > 0 && push < 0.05) {
       const barLen = Math.max(30, (viewH / pageH) * viewH);
       ctx.fillStyle = "rgba(11,18,32,0.35)";
       roundRect(ctx, viewX + viewW - 7, viewY + 4 + (scrollY / maxScroll) * (viewH - barLen - 8), 4, barLen, 2);
@@ -1294,10 +1364,6 @@ export function renderFrame(ctx: CanvasRenderingContext2D, input: RenderInput, t
     }
   }
 
-  if (input.presenter && scene.kind !== "cta") {
-    drawPresenter(ctx, input.presenter, 1186, 606, 56, t, input.fonts, { alpha: clamp(t / 0.8, 0, 1) });
-  }
-
   subtitles(ctx, input.fonts, scene, local);
 
   // Hairline progress
@@ -1307,7 +1373,7 @@ export function renderFrame(ctx: CanvasRenderingContext2D, input: RenderInput, t
   ctx.fillRect(0, VIDEO_H - 3, VIDEO_W * clamp(t / Math.max(total, 0.001), 0, 1), 3);
 }
 
-export function estimateDuration(narration: string): number {
+export function estimateDuration(narration: string, kind?: VideoScene["kind"]): number {
   const words = narration.split(/\s+/).filter(Boolean).length;
-  return Math.max(4, words / 2.8 + 1.2);
+  return Math.max(4, words / 2.8 + 1.2) + (kind === "intro" ? HOOK : 0);
 }

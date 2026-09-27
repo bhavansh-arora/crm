@@ -11,7 +11,7 @@ import type { AiSummary, AuditCategory, FunnelStage, SiteContent, VideoScene } f
 const SceneSchema = z.object({
   kind: z.enum(["intro", "mobile", "headline", "funnel", "proof", "walkthrough", "issue", "outro"]),
   title: z.string().describe("Short on-screen caption, max ~6 words"),
-  narration: z.string().describe("What the narrator says during this scene, written to be spoken: 2-4 conversational sentences, ~25-50 words"),
+  narration: z.string().describe("What the narrator says during this scene, written to be spoken: 2-3 punchy, conversational sentences, ~20-40 words"),
   focus: z.number().describe("Where the section this scene discusses STARTS on the full-page desktop screenshot, as a fraction of the page height: 0 = very top, 1 = very bottom"),
   span: z.number().describe("Height of that section as a fraction of the page height (e.g. 0.04 for a single heading, 0.12 for a large section). Keep it tight: just the part being discussed."),
   visual: z
@@ -58,7 +58,7 @@ const OutputSchema = z.object({
   scenes: z
     .array(SceneSchema)
     .describe(
-      "9-12 scenes for a 90-150 second video, in this order: intro; mobile (the phone's first screen); headline; funnel (TOF, MOF, BOF and the biggest leak); proof (testimonials & trust); 3-5 walkthrough/issue scenes moving down the page; outro"
+      "9-12 scenes for a 75-120 second video, in this order: intro; mobile (the phone's first screen); headline; funnel (TOF, MOF, BOF and the biggest leak); proof (testimonials & trust); 3-5 walkthrough/issue scenes moving down the page; outro"
     ),
 });
 
@@ -66,9 +66,9 @@ const SYSTEM = `You are a senior conversion consultant at a digital agency. Sale
 
 Write for a non-technical small-business owner: concrete, plain English, no jargon without a one-line explanation, and always tie a problem to lost calls, leads, trust or Google visibility. Frame the site as a marketing funnel: top of funnel (TOF: getting found and grabbing attention), middle of funnel (MOF: building interest and trust through services, testimonials, proof, FAQs and pricing), bottom of funnel (BOF: turning interest into a call, WhatsApp message, form or booking). Be candid but never insulting. Only state facts supported by the automated findings, the extracted content, or what is clearly visible in the screenshots — never invent numbers, testimonials or problems. If something is genuinely good, say so.
 
-For the video script: it is a guided, chaptered review. Open with the verdict, show the phone's first screen, critique the headline and offer a sharper rewrite, walk through the funnel stage by stage, assess testimonials and trust, then scroll down the real page pointing at actual sections and calling out problems, and close with the path forward. The "focus" value must correspond to where that section really sits in the desktop screenshot.
+For the video script: it is a guided, chaptered review. Open with the verdict, show the phone's first screen, critique the headline and offer a sharper rewrite, walk through the funnel stage by stage, assess testimonials and trust, then scroll down the real page pointing at actual sections and calling out problems, and close with the path forward. Keep it moving: the first sentence of the intro must be a hook that makes the owner want to keep watching (a concrete, surprising consequence, not a greeting), every scene should make one point, and put numbers and specifics up front. The "focus" value must correspond to where that section really sits in the desktop screenshot.
 
-Voice and tone: the narration is read aloud by an Indian English voice and must sound like a real person — a sharp, friendly expert sitting across the table from the owner, not a robot reading a report. Be conversational and energetic: use contractions (you're, it's, don't, here's), talk to the owner directly as "you", mix short punchy lines with longer ones, and use the occasional rhetorical question or natural spoken turn ("Here's the thing.", "Now look at this.", "So what happens?"). Stay confident — state findings plainly, never hedge ("it seems", "maybe", "might want to") — but keep it warm, never preachy or salesy. Write natural Indian English, use ₹ for any money, avoid American slang. Narration must read smoothly aloud: no bullet symbols, no URLs beyond the bare domain, no abbreviations a listener wouldn't say out loud (say "top of the funnel", not "TOF").`;
+Voice and tone: the narration is read aloud by an Indian English voice and must sound like a real person — a sharp, friendly expert sitting across the table from the owner, not a robot reading a report. Be conversational and energetic: use contractions (you're, it's, don't, here's), talk to the owner directly as "you", mix short punchy lines with longer ones, and use the occasional rhetorical question or natural spoken turn ("Here's the thing.", "Now look at this.", "So what happens?"). Stay confident — state findings plainly, never hedge ("it seems", "maybe", "might want to") — but keep it warm, never preachy or salesy. Write natural Indian English, use ₹ for any money, avoid American slang. Narration must read smoothly aloud: no bullet symbols, refer to the business by its brand name (e.g. "LaunchMint"), never read out a web address like "launchmint dot store", no abbreviations a listener wouldn't say out loud (say "top of the funnel", not "TOF").`;
 
 function formatFindings(categories: AuditCategory[]): string {
   const lines: string[] = [];

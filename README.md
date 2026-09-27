@@ -87,19 +87,17 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   first screen, headline critique with three stronger rewrites, a
   stage-by-stage funnel diagnosis, social-proof recommendations, the top
   problems, design observations, quick wins and a closing pitch. The same page renders a
-  2-minute chaptered **walkthrough video** in the browser: an animated
-  score intro; the phone's first screen with the fold marked; the headline
-  struck through and rewritten; an animated TOF/MOF/BOF funnel with the
-  leak highlighted; the site's real testimonials; a guided cursor tour down
-  the page that spotlights only the exact section being discussed (things
+  2-minute chaptered **walkthrough video** in the browser: a kinetic
+  opening hook ("4 things are quietly costing …"); an animated score intro;
+  the phone's first screen with the fold marked; the headline struck through
+  and rewritten; an animated TOF/MOF/BOF funnel with the leak highlighted;
+  the site's real testimonials; a guided cursor tour down the page that
+  spotlights and zooms into only the exact section being discussed (things
   that aren't visible on the page — like the Google description — are shown
   as a mock Google result, missing sections as an "add it here" marker);
-  an on-screen presenter — the rep's own uploaded photo, which lip-syncs to
-  the narration (the face is located in the browser with Google's
-  open-source MediaPipe Face Landmarker, then the jaw and lips are warped
-  in time with the voice);
-  word-by-word captions timed to the voice; clean fade transitions; a soft
-  synthesised music bed; and a closing call-to-action scene with your
+  word-by-word captions timed to the voice, with numbers and key words
+  punched in gold; fade transitions with whooshes; an upbeat synthesised
+  music bed; and a closing call-to-action scene with your
   agency's name and contact details — narrated by our own Indian English voice
   (see "Narration voice" below), then exported as MP4/WebM to send to the
   prospect.

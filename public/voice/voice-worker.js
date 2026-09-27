@@ -99,7 +99,11 @@ function normalize(text) {
     .replace(/(\d+(?:\.\d+)?)\s?MB\b/g, "$1 megabytes")
     .replace(/https?:\/\//gi, "")
     .replace(/\bwww\./gi, "")
-    .replace(/\b([a-z0-9-]+)\.(co\.in|com|in|net|org|io|co|biz|info|store|shop|online|site|app|dev|ai|tech|xyz|me|us|uk)\b/gi, (_, d, tld) => `${d} dot ${tld.replace(".", " dot ")}`)
+    // Say a website the way people do — by its name ("launchmint"), not
+    // "launchmint dot store", which sounds robotic mid-sentence.
+    .replace(/\b([a-z0-9-]+)\.(co\.in|com|in|net|org|io|co|biz|info|store|shop|online|site|app|dev|ai|tech|xyz|me|us|uk)\b/gi, (_, d) => d.replace(/-/g, " "))
+    // CamelCase brand names read as separate words: "LaunchMint" → "Launch Mint".
+    .replace(/\b([A-Z][a-z]+)([A-Z][a-z]+)\b/g, "$1 $2")
     .replace(/\bSEO\b/g, "S.E.O.")
     .replace(/\bHTTPS\b/g, "H.T.T.P.S.")
     .replace(/\bHTTP\b/g, "H.T.T.P.")
@@ -143,7 +147,10 @@ function splitSentences(text) {
 }
 
 async function blendedStyle(mix, tokenCount) {
-  const offset = STYLE_DIM * Math.min(Math.max(tokenCount - 2, 0), 509);
+  // Kokoro stores one style per sentence length; picking it purely by length
+  // made the voice's pitch jump ~10% between short and long sentences.
+  // Keeping to a narrow middle band keeps it sounding like one person.
+  const offset = STYLE_DIM * Math.min(Math.max(tokenCount - 2, 80), 140);
   const style = new Float32Array(STYLE_DIM);
   const totalWeight = mix.reduce((s, [, w]) => s + w, 0) || 1;
   for (const [name, weight] of mix) {
