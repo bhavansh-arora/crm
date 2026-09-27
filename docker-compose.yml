@@ -45,6 +45,10 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile
       - caddy-data:/data
       - caddy-config:/config
+      # Serves the Lead Finder CLI's generated demo sites at demo.codebunny.net
+      # (see /opt/lead-finder-cli) -- read-only since this container only
+      # displays them, never writes to them.
+      - /opt/lead-finder-cli/lead-finder/demo-site:/srv/demo-site:ro
     depends_on:
       - app
 
