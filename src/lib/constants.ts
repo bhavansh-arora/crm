@@ -108,5 +108,4 @@ export const INVOICE_STATUS_COLORS: Record<string, string> = {
 export const INVOICE_SOURCE_LABELS: Record<string, string> = {
   MANUAL: "Manual",
   RAZORPAY: "Razorpay",
-  API: "API",
 };

@@ -117,7 +117,7 @@ export type Invoice = {
   invoiceNumber: string;
   financialYear: string;
   invoiceDate: string;
-  source: "MANUAL" | "RAZORPAY" | "API";
+  source: "MANUAL" | "RAZORPAY";
   status: "PAID" | "UNPAID" | "CANCELLED";
   customerName: string;
   customerEmail: string | null;

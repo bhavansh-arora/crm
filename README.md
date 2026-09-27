@@ -57,8 +57,8 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   payment link from any lead, share it, and see whether it's been paid —
   updated automatically via webhook, or on demand with "Check status".
 - **Invoices (admin)**: issue invoices in CodeBunny's name — manually from
-  the Invoices page (or "Create invoice" on any lead), automatically from
-  Razorpay payments, or through an API. Each invoice gets a sequential
+  the Invoices page (or "Create invoice" on any lead), or automatically
+  from Razorpay payments. Each invoice gets a sequential
   number per Indian financial year (e.g. `CB/2026-27/0001`), a PDF, and is
   recorded on the server's disk along with monthly and yearly registers.
   See [Invoices](#invoices) below.
@@ -248,39 +248,26 @@ Redeploy/restart after setting these.
 ## Invoices
 
 Admins get an **Invoices** page (top nav / mobile menu) for invoices issued
-in the business's name (CodeBunny by default; set `INVOICE_COMPANY_*` in
-`.env` for your address, GSTIN, email, phone, and optional logo).
+as **CodeBunny, A8, Flower Valley, VIP Road, Raipur - 492001,
+info@codebunny.net**. These are built in; override them with the
+`INVOICE_COMPANY_*` settings in `.env` if they change. GST is off for now:
+invoices are plain "INVOICE"s with no tax line. Set
+`INVOICE_DEFAULT_TAX_RATE` (e.g. `18`) later to turn it on.
 
-**Three ways to create one:**
+**Two ways invoices get created:**
 
-1. **Manual:** click **+ New invoice** (or **Create invoice** on a lead to
-   prefill the customer). Add line items, GST rate (tick "rates already
-   include GST" to back tax out of the prices), date, status, and payment method.
-2. **From Razorpay:** click **Import from Razorpay** and pick a date range
-   (every *captured* payment in it gets an invoice), or paste a single
-   `pay_...` ID. Payments that already have an invoice are skipped, so
-   running it again is safe. To make this automatic, set
-   `RAZORPAY_AUTO_INVOICE="true"` and enable the **payment.captured** event
-   on the Razorpay webhook described above. The customer is filled in from the
-   payment (and the matching CRM lead, by email/phone, when there is one).
-   Razorpay amounts are treated as GST-inclusive at `INVOICE_DEFAULT_TAX_RATE`.
-3. **API:** set `INVOICE_API_SECRET`, then call with
-   `Authorization: Bearer <secret>`:
-
-   | Method & path | What it does |
-   |---|---|
-   | `POST /api/external/invoices` | Create an invoice. Body: `{"customerName": "...", "items": [{"description": "...", "quantity": 1, "rate": 5000}], "taxRate": 18, "customerEmail", "customerPhone", "customerAddress", "customerGstin", "invoiceDate": "2026-09-27", "status": "PAID"\|"UNPAID", "paymentMethod", "notes", "taxInclusive": false}` |
-   | `POST /api/external/invoices/razorpay` | `{"paymentId": "pay_..."}` or `{"from": "2026-09-01", "to": "2026-09-30"}` |
-   | `GET /api/external/invoices?month=2026-09` | List (`fy=2026-27`, `status=`, `q=` also work) |
-   | `GET /api/external/invoices/{id}` / `.../{id}/pdf` | One invoice / its PDF |
-   | `GET /api/external/invoices/summary` | Yearly + monthly totals |
-   | `GET /api/external/invoices/export?month=2026-09` | Monthly register CSV (`?fy=2026-27` for the yearly one) |
-
-   ```bash
-   curl -X POST https://yourdomain.com/api/external/invoices \
-     -H "Authorization: Bearer $INVOICE_API_SECRET" -H "Content-Type: application/json" \
-     -d '{"customerName":"Acme Pvt Ltd","items":[{"description":"Website","quantity":1,"rate":25000}],"taxRate":18}'
-   ```
+1. **Automatically from Razorpay.** Once `RAZORPAY_KEY_ID` /
+   `RAZORPAY_KEY_SECRET` are set, every captured Razorpay payment becomes an
+   invoice by itself. On the VPS, `deploy/setup-vps.sh` schedules a sync every
+   15 minutes, so there's nothing else to set up. For instant invoices, also
+   enable the **payment.captured** event on the Razorpay webhook described
+   above. To catch up right away, click **Sync from Razorpay → Sync now**
+   on the Invoices page (last 30 days). The same panel can import an older
+   date range or a single `pay_...` ID. A payment is only ever invoiced once,
+   however many times it's synced. The customer comes from the payment, and
+   from the matching CRM lead (by email/phone) when there is one.
+2. **Manually.** Click **+ New invoice**, or **Create invoice** on a lead to
+   prefill the customer. Add line items, the date, status and payment method.
 
 **Records on the server:** every invoice is a row in the database, and its PDF
 is also saved on the VPS disk alongside a register CSV for each month and each

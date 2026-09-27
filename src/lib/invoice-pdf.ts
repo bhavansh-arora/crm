@@ -7,9 +7,9 @@ import type { Invoice } from "@prisma/client";
 export function getCompanyDetails() {
   return {
     name: process.env.INVOICE_COMPANY_NAME || "CodeBunny",
-    address: process.env.INVOICE_COMPANY_ADDRESS || "",
+    address: process.env.INVOICE_COMPANY_ADDRESS || "A8, Flower Valley, VIP Road|Raipur - 492001",
     gstin: process.env.INVOICE_COMPANY_GSTIN || "",
-    email: process.env.INVOICE_COMPANY_EMAIL || "",
+    email: process.env.INVOICE_COMPANY_EMAIL || "info@codebunny.net",
     phone: process.env.INVOICE_COMPANY_PHONE || "",
     website: process.env.INVOICE_COMPANY_WEBSITE || "",
     logoPath: process.env.INVOICE_LOGO_PATH || "",
@@ -174,7 +174,8 @@ export async function renderInvoicePdf(invoice: Invoice): Promise<Uint8Array> {
   const companyLines = [
     ...splitLines(company.address),
     company.gstin ? `GSTIN: ${company.gstin}` : "",
-    [company.email, company.phone].filter(Boolean).join("  |  "),
+    company.email ? `Email: ${company.email}` : "",
+    company.phone ? `Phone: ${company.phone}` : "",
     company.website,
   ].filter(Boolean);
   for (const line of companyLines) {

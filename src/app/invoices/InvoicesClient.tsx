@@ -37,7 +37,7 @@ export default function InvoicesClient({
   const { data, isLoading, error, mutate } = useSWR<{ invoices: Invoice[] }>(`/api/invoices?${params}`, fetcher);
   const { data: summaryData, mutate: mutateSummary } = useSWR<{ summary: InvoiceYearSummary[] }>(
     "/api/invoices/summary",
-    fetcher
+    fetcher,
   );
 
   const invoices = data?.invoices || [];
@@ -61,14 +61,16 @@ export default function InvoicesClient({
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Invoices</h1>
-          <p className="text-sm text-slate-500">Issued as {companyName} — saved on the server with monthly and yearly registers.</p>
+          <p className="text-sm text-slate-500">
+            Issued as {companyName} — saved on the server with monthly and yearly registers.
+          </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowImport((s) => !s)}
             className="rounded-lg px-3 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
           >
-            Import from Razorpay
+            Sync from Razorpay
           </button>
           <Link
             href="/invoices/new"
@@ -123,7 +125,10 @@ export default function InvoicesClient({
               className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
             />
             {month && (
-              <button onClick={() => setMonth("")} className="rounded-lg px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-200">
+              <button
+                onClick={() => setMonth("")}
+                className="rounded-lg px-3 py-2 text-sm text-slate-600 ring-1 ring-slate-200"
+              >
                 All months
               </button>
             )}
@@ -160,7 +165,9 @@ export default function InvoicesClient({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-sm font-semibold text-slate-900">{inv.invoiceNumber}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${INVOICE_STATUS_COLORS[inv.status]}`}>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${INVOICE_STATUS_COLORS[inv.status]}`}
+                    >
                       {INVOICE_STATUS_LABELS[inv.status]}
                     </span>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
@@ -206,36 +213,44 @@ function Records({
   return (
     <div className="space-y-5">
       <p className="text-sm text-slate-500">
-        Years are Indian financial years (April–March). Amounts exclude cancelled invoices. Every register is also
-        saved as a CSV file next to the invoice PDFs on the server.
+        Years are Indian financial years (April–March). Amounts exclude cancelled invoices. Every register is also saved
+        as a CSV file next to the invoice PDFs on the server.
       </p>
       {summary.map((year) => (
         <section key={year.financialYear} className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold text-slate-900">FY {year.financialYear}</h2>
-            <a href={`/api/invoices/export?fy=${year.financialYear}`} className="text-sm font-medium text-brand-700 hover:underline">
+            <a
+              href={`/api/invoices/export?fy=${year.financialYear}`}
+              className="text-sm font-medium text-brand-700 hover:underline"
+            >
               Download yearly register (CSV)
             </a>
           </div>
-          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="Invoices" value={String(year.count)} sub={year.cancelledCount ? `${year.cancelledCount} cancelled` : undefined} />
-            <Stat label="Taxable value" value={formatMoney(year.subtotal)} />
-            <Stat label="GST" value={formatMoney(year.tax)} />
+          <div className={`mb-4 grid grid-cols-2 gap-3 ${year.tax > 0 ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
+            <Stat
+              label="Invoices"
+              value={String(year.count)}
+              sub={year.cancelledCount ? `${year.cancelledCount} cancelled` : undefined}
+            />
+            {year.tax > 0 && <Stat label="Taxable value" value={formatMoney(year.subtotal)} />}
+            {year.tax > 0 && <Stat label="GST" value={formatMoney(year.tax)} />}
             <Stat
               label="Total invoiced"
               value={formatMoney(year.total)}
               sub={year.unpaidCount ? `${year.unpaidCount} unpaid` : "all paid"}
             />
+            {year.tax === 0 && <Stat label="Received" value={formatMoney(year.paidTotal)} />}
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-sm">
+            <table className={`w-full text-sm ${year.tax > 0 ? "min-w-[520px]" : ""}`}>
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="py-2 font-medium">Month</th>
                   <th className="py-2 text-right font-medium">Invoices</th>
-                  <th className="py-2 text-right font-medium">Taxable</th>
-                  <th className="py-2 text-right font-medium">GST</th>
+                  {year.tax > 0 && <th className="py-2 text-right font-medium">Taxable</th>}
+                  {year.tax > 0 && <th className="py-2 text-right font-medium">GST</th>}
                   <th className="py-2 text-right font-medium">Total</th>
                   <th className="py-2 text-right font-medium">Register</th>
                 </tr>
@@ -244,7 +259,10 @@ function Records({
                 {year.months.map((m) => (
                   <tr key={m.month} className="border-b border-slate-100 last:border-0">
                     <td className="py-2">
-                      <button onClick={() => onViewMonth(m.month)} className="font-medium text-slate-900 hover:text-brand-700">
+                      <button
+                        onClick={() => onViewMonth(m.month)}
+                        className="font-medium text-slate-900 hover:text-brand-700"
+                      >
                         {formatMonthKey(m.month)}
                       </button>
                     </td>
@@ -252,8 +270,8 @@ function Records({
                       {m.count}
                       {m.cancelledCount > 0 && <span className="text-slate-400"> (+{m.cancelledCount} cxl)</span>}
                     </td>
-                    <td className="py-2 text-right">{formatMoney(m.subtotal)}</td>
-                    <td className="py-2 text-right">{formatMoney(m.tax)}</td>
+                    {year.tax > 0 && <td className="py-2 text-right">{formatMoney(m.subtotal)}</td>}
+                    {year.tax > 0 && <td className="py-2 text-right">{formatMoney(m.tax)}</td>}
                     <td className="py-2 text-right font-semibold">{formatMoney(m.total)}</td>
                     <td className="py-2 text-right">
                       <a href={`/api/invoices/export?month=${m.month}`} className="text-brand-700 hover:underline">
@@ -289,6 +307,7 @@ function RazorpayImport({ configured, onImported }: { configured: boolean; onImp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   async function run(body: object) {
     setLoading(true);
@@ -315,61 +334,93 @@ function RazorpayImport({ configured, onImported }: { configured: boolean; onImp
 
   return (
     <div className="mb-5 space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-      <p className="text-sm text-slate-600">
-        Issues an invoice for every <b>captured</b> Razorpay payment. Payments that already have an invoice are skipped,
-        so it&apos;s safe to run again.
-      </p>
-      <form
-        onSubmit={(e: FormEvent) => {
-          e.preventDefault();
-          run({ from, to });
-        }}
-        className="flex flex-wrap items-end gap-2"
-      >
-        <label className="text-sm text-slate-700">
-          From
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-        </label>
-        <label className="text-sm text-slate-700">
-          To
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm" />
-        </label>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="max-w-xl text-sm text-slate-600">
+          New Razorpay payments are turned into invoices <b>automatically</b> every 15 minutes. Click to pick up
+          anything from the last 30 days right now — payments that already have an invoice are skipped.
+        </p>
         <button
-          type="submit"
+          onClick={() => run({ lastDays: 30 })}
           disabled={loading}
           className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-60"
         >
-          {loading ? "Importing…" : "Import payments"}
+          {loading ? "Syncing…" : "Sync now"}
         </button>
-      </form>
-      <form
-        onSubmit={(e: FormEvent) => {
-          e.preventDefault();
-          if (paymentId.trim()) run({ paymentId: paymentId.trim() });
-        }}
-        className="flex flex-wrap gap-2 border-t border-slate-100 pt-4"
+      </div>
+      <button
+        type="button"
+        onClick={() => setShowAdvanced((s) => !s)}
+        className="text-sm font-medium text-slate-500 hover:text-slate-700"
       >
-        <input
-          value={paymentId}
-          onChange={(e) => setPaymentId(e.target.value)}
-          placeholder="Or a single payment ID, e.g. pay_ABC123"
-          className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-        />
-        <button
-          type="submit"
-          disabled={loading || !paymentId.trim()}
-          className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-60"
-        >
-          Create invoice
-        </button>
-      </form>
+        {showAdvanced ? "▾" : "▸"} Older payments or a single payment
+      </button>
+      {showAdvanced && (
+        <>
+          <form
+            onSubmit={(e: FormEvent) => {
+              e.preventDefault();
+              run({ from, to });
+            }}
+            className="flex flex-wrap items-end gap-2"
+          >
+            <label className="text-sm text-slate-700">
+              From
+              <input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-sm text-slate-700">
+              To
+              <input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-60"
+            >
+              {loading ? "Importing…" : "Import payments"}
+            </button>
+          </form>
+          <form
+            onSubmit={(e: FormEvent) => {
+              e.preventDefault();
+              if (paymentId.trim()) run({ paymentId: paymentId.trim() });
+            }}
+            className="flex flex-wrap gap-2 border-t border-slate-100 pt-4"
+          >
+            <input
+              value={paymentId}
+              onChange={(e) => setPaymentId(e.target.value)}
+              placeholder="Or a single payment ID, e.g. pay_ABC123"
+              className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={loading || !paymentId.trim()}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100 disabled:opacity-60"
+            >
+              Create invoice
+            </button>
+          </form>
+        </>
+      )}
 
-      {error && <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600 ring-1 ring-rose-200">{error}</div>}
+      {error && (
+        <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600 ring-1 ring-rose-200">{error}</div>
+      )}
       {result && (
         <div className="rounded-lg bg-slate-50 p-3 text-sm">
           <p className="font-medium text-slate-800">
             {result.created} created · {result.skipped} already invoiced · {result.failed} failed
-            {result.results.length === 0 && " — no captured payments in that range"}
+            {result.results.length === 0 && " — no captured payments found"}
           </p>
           {result.results.length > 0 && (
             <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-slate-600">

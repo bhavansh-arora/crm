@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { NextResponse } from "next/server";
 import path from "path";
@@ -14,7 +13,7 @@ import { computeTotals, round2, type InvoiceItem } from "@/lib/invoice-math";
 export { getCompanyDetails } from "@/lib/invoice-pdf";
 
 // Invoices are stored twice: as rows in the database (the source of truth,
-// used by the UI/API) and as files on the server's disk under INVOICE_DIR --
+// used by the UI) and as files on the server's disk under INVOICE_DIR --
 // one PDF per invoice plus a register.csv per month and per financial year,
 // laid out as:
 //
@@ -30,7 +29,7 @@ export const INVOICE_DIR = process.env.INVOICE_DIR || path.join(process.cwd(), "
 
 export const INVOICE_STATUSES = ["PAID", "UNPAID", "CANCELLED"] as const;
 export type InvoiceStatusValue = (typeof INVOICE_STATUSES)[number];
-export type InvoiceSource = "MANUAL" | "RAZORPAY" | "API";
+export type InvoiceSource = "MANUAL" | "RAZORPAY";
 
 
 const INVOICE_PREFIX = process.env.INVOICE_PREFIX || "CB";
@@ -120,7 +119,7 @@ const optionalText = (max: number) =>
     .nullable()
     .transform((v) => v || null);
 
-// Shared by the admin "New invoice" form and the external API.
+// Used by the admin "New invoice" form (and, internally, Razorpay imports).
 export const invoiceInputSchema = z.object({
   customerName: z.string().trim().min(1, "Customer name is required").max(200),
   customerEmail: z
@@ -235,8 +234,9 @@ function paymentNote(payment: RazorpayPayment, keys: string[]): string | null {
 }
 
 // Idempotent: a payment that already has an invoice returns that invoice
-// with created=false instead of issuing a second one, so the webhook, a
-// manual sync and the API can all safely see the same payment.
+// with created=false instead of issuing a second one, so the webhook, the
+// scheduled sync and the "Sync from Razorpay" button can all safely see
+// the same payment.
 export async function createInvoiceFromRazorpayPayment(
   payment: RazorpayPayment,
   opts: { createdById?: string | null; leadId?: string | null; source?: InvoiceSource } = {}
@@ -295,7 +295,7 @@ export async function createInvoiceFromRazorpayPayment(
     );
     return { invoice, created: true };
   } catch (error) {
-    // Two callers (e.g. webhook + a manual sync) raced on the same payment.
+    // Two callers (e.g. webhook + the scheduled sync) raced on the same payment.
     if (isUniqueViolation(error)) {
       const invoice = await prisma.invoice.findUnique({ where: { razorpayPaymentId: payment.id } });
       if (invoice) return { invoice, created: false };
@@ -580,22 +580,14 @@ export function listInvoicesWhere(params: URLSearchParams): Prisma.InvoiceWhereI
   return where;
 }
 
-// Bearer-token check for the server-to-server /api/external/invoices
-// routes, same pattern as EXTERNAL_LEADS_SECRET. Unset = API disabled.
-export function isInvoiceApiAuthorized(authorization: string | null): boolean {
-  const secret = process.env.INVOICE_API_SECRET;
-  if (!secret || !authorization) return false;
-  const expected = Buffer.from(`Bearer ${secret}`);
-  const actual = Buffer.from(authorization);
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
-}
-
 export const razorpayImportSchema = z.union([
   z.object({ paymentId: z.string().trim().regex(/^pay_[A-Za-z0-9]+$/, "Payment ID should look like pay_XXXXXXXX") }),
   z.object({
     from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "from must be YYYY-MM-DD"),
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "to must be YYYY-MM-DD"),
   }),
+  // The one-click "Sync from Razorpay" button and the scheduled sync.
+  z.object({ lastDays: z.number().int().min(1).max(90) }),
 ]);
 
 export type RazorpayImportResult = {
@@ -606,7 +598,7 @@ export type RazorpayImportResult = {
 };
 
 // Issues an invoice for one Razorpay payment, or for every captured payment
-// in a date range (inclusive, IST days) -- oldest first, so invoice numbers
+// in a date range (inclusive, IST days) or the last N days -- oldest first, so invoice numbers
 // follow payment order. Payments that already have an invoice are skipped.
 export async function importFromRazorpay(
   rawInput: z.input<typeof razorpayImportSchema>,
@@ -621,6 +613,12 @@ export async function importFromRazorpay(
   try {
     if ("paymentId" in input) {
       payments = [await getPayment(input.paymentId)];
+    } else if ("lastDays" in input) {
+      const to = new Date();
+      const from = new Date(to.getTime() - input.lastDays * 24 * 60 * 60 * 1000);
+      payments = (await listPayments(from, to))
+        .filter((p) => p.status === "captured")
+        .sort((a, b) => a.created_at - b.created_at);
     } else {
       const from = parseInvoiceDate(input.from);
       const to = new Date(parseInvoiceDate(input.to).getTime() + 24 * 60 * 60 * 1000 - 1);

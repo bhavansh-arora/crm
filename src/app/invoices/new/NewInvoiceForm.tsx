@@ -23,6 +23,9 @@ const PAYMENT_METHODS = ["Razorpay", "UPI", "Bank transfer", "Cash", "Cheque", "
 
 export default function NewInvoiceForm({ defaultTaxRate, lead }: { defaultTaxRate: number; lead: LeadPrefill }) {
   const router = useRouter();
+  // GST is off until INVOICE_DEFAULT_TAX_RATE is set above 0 -- the form
+  // then shows the GST rate and customer GSTIN fields.
+  const gstEnabled = defaultTaxRate > 0;
   const [form, setForm] = useState({
     customerName: lead?.name || "",
     customerEmail: lead?.email || "",
@@ -88,7 +91,12 @@ export default function NewInvoiceForm({ defaultTaxRate, lead }: { defaultTaxRat
       <h1 className="mb-1 text-2xl font-semibold text-slate-900">New Invoice</h1>
       <p className="mb-5 text-sm text-slate-500">
         The invoice number is assigned automatically when you save.
-        {lead && <> Linked to lead <span className="font-medium text-slate-700">{lead.name}</span>.</>}
+        {lead && (
+          <>
+            {" "}
+            Linked to lead <span className="font-medium text-slate-700">{lead.name}</span>.
+          </>
+        )}
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -99,7 +107,11 @@ export default function NewInvoiceForm({ defaultTaxRate, lead }: { defaultTaxRat
         <section className="space-y-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Bill to</h2>
           <Field label="Customer / business name" required>
-            <input value={form.customerName} onChange={(e) => update("customerName", e.target.value)} className="input" />
+            <input
+              value={form.customerName}
+              onChange={(e) => update("customerName", e.target.value)}
+              className="input"
+            />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Email">
@@ -111,7 +123,11 @@ export default function NewInvoiceForm({ defaultTaxRate, lead }: { defaultTaxRat
               />
             </Field>
             <Field label="Phone">
-              <input value={form.customerPhone} onChange={(e) => update("customerPhone", e.target.value)} className="input" />
+              <input
+                value={form.customerPhone}
+                onChange={(e) => update("customerPhone", e.target.value)}
+                className="input"
+              />
             </Field>
           </div>
           <Field label="Billing address">
@@ -122,14 +138,16 @@ export default function NewInvoiceForm({ defaultTaxRate, lead }: { defaultTaxRat
               className="input"
             />
           </Field>
-          <Field label="Customer GSTIN">
-            <input
-              value={form.customerGstin}
-              onChange={(e) => update("customerGstin", e.target.value.toUpperCase())}
-              className="input"
-              placeholder="Optional"
-            />
-          </Field>
+          {gstEnabled && (
+            <Field label="Customer GSTIN">
+              <input
+                value={form.customerGstin}
+                onChange={(e) => update("customerGstin", e.target.value.toUpperCase())}
+                className="input"
+                placeholder="Optional"
+              />
+            </Field>
+          )}
         </section>
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -185,27 +203,31 @@ export default function NewInvoiceForm({ defaultTaxRate, lead }: { defaultTaxRat
           </button>
 
           <div className="mt-5 grid gap-4 border-t border-slate-100 pt-4 sm:grid-cols-2">
-            <div className="space-y-3">
-              <Field label="GST rate (%)">
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="any"
-                  value={form.taxRate}
-                  onChange={(e) => update("taxRate", e.target.value)}
-                  className="input"
-                />
-              </Field>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={form.taxInclusive}
-                  onChange={(e) => update("taxInclusive", e.target.checked)}
-                />
-                Rates above already include GST
-              </label>
-            </div>
+            {gstEnabled ? (
+              <div className="space-y-3">
+                <Field label="GST rate (%)">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    value={form.taxRate}
+                    onChange={(e) => update("taxRate", e.target.value)}
+                    className="input"
+                  />
+                </Field>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={form.taxInclusive}
+                    onChange={(e) => update("taxInclusive", e.target.checked)}
+                  />
+                  Rates above already include GST
+                </label>
+              </div>
+            ) : (
+              <div />
+            )}
             <dl className="space-y-1.5 self-end text-sm">
               <div className="flex justify-between text-slate-500">
                 <dt>Subtotal</dt>
