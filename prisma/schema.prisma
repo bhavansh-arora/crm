@@ -28,6 +28,7 @@ model User {
   paymentLinks      PaymentLink[]
   whatsAppTemplates WhatsAppTemplate[]
   heartbeatLogs     HeartbeatLog[]
+  siteAudits        SiteAudit[]
 }
 
 // One row per heartbeat ping (throttled to roughly one per minute of active
@@ -83,6 +84,7 @@ model Lead {
   activities   Activity[]
   followUps    FollowUp[]
   paymentLinks PaymentLink[]
+  siteAudits   SiteAudit[]
 
   @@index([status])
   @@index([assignedToId])
@@ -143,4 +145,33 @@ model PaymentLink {
 
   @@index([leadId])
   @@index([razorpayId])
+}
+
+// A saved website audit (see src/lib/site-audit). The full report -- including
+// the screenshots as data URLs and the video script -- lives in `report`; the
+// summary columns beside it keep the audits dashboard fast without loading it.
+model SiteAudit {
+  id          String    @id @default(cuid())
+  url         String
+  domain      String
+  pageTitle   String?
+  score       Int
+  grade       String
+  siteType    String // "store" | "business"
+  verdict     String? // the AI's one-line headline
+  report      Json
+  status      String    @default("NEW") // see AUDIT_STATUSES
+  notes       String?
+  sentAt      DateTime?
+  lead        Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId      String?
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([createdAt])
+  @@index([leadId])
+  @@index([createdById])
+  @@index([domain])
 }

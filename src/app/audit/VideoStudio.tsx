@@ -85,7 +85,14 @@ function hookLine(report: AuditReport): string {
   return problems >= 2 ? `${problems} things are quietly costing ${name} ${loss}` : `Is ${name} losing ${loss}? Let's find out.`;
 }
 
-export default function VideoStudio({ report }: { report: AuditReport }) {
+export default function VideoStudio({
+  report,
+  onScriptChange,
+}: {
+  report: AuditReport;
+  // Called after the user edits the script (not on first load).
+  onScriptChange?: (scenes: VideoScene[]) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scenes, setScenes] = useState<VideoScene[]>(report.videoScript);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -482,7 +489,9 @@ export default function VideoStudio({ report }: { report: AuditReport }) {
   }
 
   function updateScene(i: number, patch: Partial<VideoScene>) {
-    setScenes((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+    const next = scenes.map((s, j) => (j === i ? { ...s, ...patch } : s));
+    setScenes(next);
+    onScriptChange?.(next);
   }
 
   const filename = `${report.domain.replace(/[^a-z0-9.-]/gi, "_")}-website-review.${videoExt}`;

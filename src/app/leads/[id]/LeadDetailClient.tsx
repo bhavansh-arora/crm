@@ -18,6 +18,7 @@ import {
 } from "@/lib/format";
 import { fillTemplate, buildWhatsAppMessage, buildWhatsAppUrl, buildTelHref } from "@/lib/phone";
 import StatusBadge from "@/components/StatusBadge";
+import { AUDIT_STATUS_LABELS, type AuditStatusValue } from "@/lib/constants";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import {
   LEAD_STATUSES,
@@ -264,6 +265,8 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
           />
         )}
       </div>
+
+      <SiteAuditsSection leadId={leadId} website={lead.website} />
 
       {/* Follow-ups */}
       <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
@@ -824,12 +827,12 @@ export function CompanyWebsiteEditor({
             >
               {formatWebsiteDisplay(website)}
             </a>
-            <Link
-              href={`/audit?url=${encodeURIComponent(websiteHref(website))}`}
+            <a
+              href={`/audit?url=${encodeURIComponent(websiteHref(website))}&leadId=${leadId}`}
               className="rounded-md px-1.5 py-0.5 text-xs font-medium text-brand-700 ring-1 ring-brand-100 hover:bg-brand-50"
             >
               🔍 Audit site
-            </Link>
+            </a>
           </>
         )}
       </div>
@@ -1109,6 +1112,53 @@ function LabeledInput({
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
       />
+    </div>
+  );
+}
+
+// Website audits run for this lead (see /audits).
+function SiteAuditsSection({ leadId, website }: { leadId: string; website: string | null }) {
+  const { data } = useSWR<{ audits: { id: string; domain: string; score: number; grade: string; status: string; verdict: string | null; createdAt: string }[] }>(
+    `/api/site-audits?leadId=${leadId}`,
+    fetcher
+  );
+  const audits = data?.audits ?? [];
+  if (!data || (audits.length === 0 && !website)) return null;
+  return (
+    <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-semibold text-slate-900">Website audits</h2>
+        {website && (
+          <a
+            href={`/audit?url=${encodeURIComponent(websiteHref(website))}&leadId=${leadId}`}
+            className="rounded-lg bg-brand-50 px-3 py-1.5 text-xs font-medium text-brand-700 hover:bg-brand-100"
+          >
+            + New audit
+          </a>
+        )}
+      </div>
+      {audits.length === 0 ? (
+        <p className="text-sm text-slate-500">No audits yet — run one to get a report and a walkthrough video for this lead.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {audits.map((a) => (
+            <li key={a.id}>
+              <a href={`/audits/${a.id}`} className="flex items-center gap-3 py-2.5 hover:bg-slate-50">
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ring-1 ${a.score >= 75 ? "bg-emerald-50 text-emerald-600 ring-emerald-200" : a.score >= 50 ? "bg-amber-50 text-amber-700 ring-amber-200" : "bg-rose-50 text-rose-600 ring-rose-200"}`}>
+                  {a.score}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-slate-800">{a.domain}</span>
+                  <span className="block truncate text-xs text-slate-500">
+                    {new Date(a.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} · {AUDIT_STATUS_LABELS[a.status as AuditStatusValue] ?? a.status}
+                  </span>
+                </span>
+                <span className="text-xs font-medium text-brand-700">Open →</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

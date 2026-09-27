@@ -103,6 +103,16 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   prospect.
   Also: save the report as PDF, or copy a ready-made WhatsApp summary. See
   "Website audit (optional key)" below.
+- **Site Audits dashboard** (`/audits`, "Site Audits" in the nav): every
+  audit is saved automatically. The dashboard shows totals (this week,
+  average score, sent, interested, won), status tabs, search by website /
+  title / lead, sort by date or score, and (admins) filter by who ran it.
+  Each audit has its own page (`/audits/[id]`) to reopen the full report and
+  video studio, with an outreach status (Not sent → Sent → Interested → Won
+  / Not interested), private notes, attach/change the lead, re-run and
+  delete. Script edits made in the video studio are saved with the audit.
+  Each lead's page lists its audits with a "+ New audit" shortcut. Reps see
+  the audits they ran plus those on their leads; admins see all.
 - **One-touch calling**: a Call button on every lead dials out via the
   device's phone app (`tel:` link — works great on mobile, needs a
   softphone on desktop). A dedicated Dialer page turns this into a queue:
@@ -317,7 +327,7 @@ with the voice, using the exact sentence timings the engine reports.
 - Generating narration runs at roughly real-time speed on a typical laptop
   (a 90-second video takes about a minute to narrate), and much faster on
   repeat runs since unchanged scenes are reused.
-- `/audit` is served with cross-origin isolation headers (see
+- `/audit` and `/audits/[id]` are served with cross-origin isolation headers (see
   `next.config.js`) so the engine can use multi-threaded WebAssembly.
 - If the voice can't load (very old browser, blocked network), the video
   still exports with on-screen captions.

@@ -21,7 +21,7 @@ const ADMIN_SECONDARY_ITEMS: NavItem[] = [
   { href: "/sources", label: "Sources", icon: "🏷️" },
   { href: "/activity", label: "Activity", icon: "📈" },
   { href: "/templates", label: "WhatsApp Templates", icon: "💬" },
-  { href: "/audit", label: "Site Audit", icon: "🔍" },
+  { href: "/audits", label: "Site Audits", icon: "🔍" },
 ];
 
 const REP_ITEMS: NavItem[] = [
@@ -33,7 +33,7 @@ const REP_ITEMS: NavItem[] = [
 
 const REP_SECONDARY_ITEMS: NavItem[] = [
   { href: "/templates", label: "WhatsApp Templates", icon: "💬" },
-  { href: "/audit", label: "Site Audit", icon: "🔍" },
+  { href: "/audits", label: "Site Audits", icon: "🔍" },
 ];
 
 export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SALES_REP" }) {
@@ -44,7 +44,7 @@ export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SAL
   const secondaryItems = role === "ADMIN" ? ADMIN_SECONDARY_ITEMS : REP_SECONDARY_ITEMS;
 
   function isActive(href: string) {
-    return pathname === href || pathname.startsWith(href + "/");
+    return pathname === href || pathname.startsWith(href + "/") || (href === "/audits" && pathname === "/audit");
   }
 
   return (

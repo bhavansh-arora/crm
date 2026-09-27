@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { apiRequest } from "@/lib/fetcher";
 import type { AuditCategory, AuditCheck, AuditReport, CategoryId } from "@/lib/site-audit/types";
 import { fontVars } from "./fonts";
 import { Card, SectionHeading, tone } from "./report-ui";
 import { FunnelSection, HeadlineSection, MobileSection, ProofSection } from "./ReportSections";
 import VideoStudio from "./VideoStudio";
+import AuditManageBar, { type SavedAudit } from "../audits/AuditManageBar";
 
 const STEPS = [
   "Opening the website",
@@ -198,12 +201,40 @@ function UrlForm({ url, setUrl, loading, onSubmit, dark }: { url: string; setUrl
   );
 }
 
-export default function AuditClient({ initialUrl }: { initialUrl: string }) {
-  const [url, setUrl] = useState(initialUrl);
+export default function AuditClient({
+  initialUrl,
+  leadId,
+  saved,
+}: {
+  initialUrl: string;
+  leadId?: string;
+  // Set when viewing an audit saved earlier (/audits/[id]).
+  saved?: { audit: SavedAudit; report: AuditReport };
+}) {
+  const router = useRouter();
+  const [url, setUrl] = useState(saved ? saved.report.finalUrl : initialUrl);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [report, setReport] = useState<AuditReport | null>(null);
+  const [report, setReport] = useState<AuditReport | null>(saved?.report ?? null);
+  const [scriptSave, setScriptSave] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const scriptTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedId = saved?.audit.id;
+
+  // Script edits in the video studio are saved with the audit (debounced).
+  const onScriptChange = useCallback(
+    (scenes: AuditReport["videoScript"]) => {
+      if (!savedId) return;
+      if (scriptTimer.current) clearTimeout(scriptTimer.current);
+      setScriptSave("saving");
+      scriptTimer.current = setTimeout(() => {
+        apiRequest(`/api/site-audits/${savedId}`, "PATCH", { videoScript: scenes.filter((s) => s.kind !== "cta") })
+          .then(() => setScriptSave("saved"))
+          .catch(() => setScriptSave("error"));
+      }, 1200);
+    },
+    [savedId]
+  );
   const [copied, setCopied] = useState(false);
   const autoRan = useRef(false);
 
@@ -220,8 +251,14 @@ export default function AuditClient({ initialUrl }: { initialUrl: string }) {
     setError(null);
     setReport(null);
     try {
-      const data = await apiRequest<{ report: AuditReport }>("/api/site-audit", "POST", { url: target.trim() });
+      const data = await apiRequest<{ report: AuditReport; id: string | null }>("/api/site-audit", "POST", {
+        url: target.trim(),
+        leadId: leadId ?? saved?.audit.lead?.id ?? null,
+      });
       setReport(data.report);
+      // Saved: move to its permanent page so it can be found again later.
+      // A full page load keeps the video studio cross-origin isolated.
+      if (data.id) window.location.assign(`/audits/${data.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Audit failed");
     } finally {
@@ -230,7 +267,7 @@ export default function AuditClient({ initialUrl }: { initialUrl: string }) {
   }
 
   useEffect(() => {
-    if (initialUrl && !autoRan.current) {
+    if (initialUrl && !saved && !autoRan.current) {
       autoRan.current = true;
       run(initialUrl);
     }
@@ -310,8 +347,15 @@ export default function AuditClient({ initialUrl }: { initialUrl: string }) {
 
       {report && (
         <div className="space-y-8">
+          {saved && <AuditManageBar audit={saved.audit} />}
           <div className="no-print">
             <UrlForm url={url} setUrl={setUrl} loading={loading} onSubmit={handleSubmit} dark={false} />
+            {error && <div className="mt-3 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">{error}</div>}
+            {!saved && (
+              <p className="mt-2 px-5 text-xs text-slate-500">
+                Saved to <Link href="/audits" className="font-medium text-brand-700 hover:underline">Site Audits</Link>.
+              </p>
+            )}
           </div>
 
           {/* Cover */}
@@ -472,7 +516,12 @@ export default function AuditClient({ initialUrl }: { initialUrl: string }) {
           </div>
 
           <div id="video" className="no-print scroll-mt-20">
-            <VideoStudio report={report} />
+            <VideoStudio report={report} onScriptChange={savedId ? onScriptChange : undefined} />
+            {savedId && scriptSave !== "idle" && (
+              <p className="no-print mt-2 text-right text-xs text-slate-500">
+                {scriptSave === "saving" ? "Saving script…" : scriptSave === "saved" ? "Script changes saved" : "Couldn't save script changes"}
+              </p>
+            )}
           </div>
         </div>
       )}

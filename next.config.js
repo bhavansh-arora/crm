@@ -16,6 +16,14 @@ const nextConfig = {
         ],
       },
       {
+        // A saved audit's page hosts the same video studio.
+        source: "/audits/:id",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy", value: "credentialless" },
+        ],
+      },
+      {
         // A worker started from an isolated page must itself be served with
         // a compatible embedder policy, or the browser refuses to run it.
         source: "/voice/:path*",

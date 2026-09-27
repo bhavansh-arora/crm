@@ -94,3 +94,23 @@ export const PAYMENT_LINK_STATUS_COLORS: Record<PaymentLinkStatusValue, string> 
   EXPIRED: "bg-slate-100 text-slate-500",
   CANCELLED: "bg-rose-100 text-rose-700",
 };
+
+// Outreach status of a saved website audit.
+export const AUDIT_STATUSES = ["NEW", "SENT", "INTERESTED", "WON", "LOST"] as const;
+export type AuditStatusValue = (typeof AUDIT_STATUSES)[number];
+
+export const AUDIT_STATUS_LABELS: Record<AuditStatusValue, string> = {
+  NEW: "Not sent",
+  SENT: "Sent",
+  INTERESTED: "Interested",
+  WON: "Won",
+  LOST: "Not interested",
+};
+
+export const AUDIT_STATUS_COLORS: Record<AuditStatusValue, string> = {
+  NEW: "bg-slate-100 text-slate-700 ring-slate-300",
+  SENT: "bg-blue-100 text-blue-700 ring-blue-300",
+  INTERESTED: "bg-amber-100 text-amber-800 ring-amber-300",
+  WON: "bg-emerald-100 text-emerald-700 ring-emerald-300",
+  LOST: "bg-rose-100 text-rose-700 ring-rose-300",
+};
