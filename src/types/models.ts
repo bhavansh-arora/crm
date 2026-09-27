@@ -155,3 +155,14 @@ export type InvoiceYearSummary = InvoicePeriodTotals & {
   financialYear: string;
   months: (InvoicePeriodTotals & { month: string })[];
 };
+
+// Business details shown on invoices (see getPublicCompanyDetails).
+export type InvoiceCompany = {
+  name: string;
+  address: string;
+  gstin: string;
+  email: string;
+  phone: string;
+  website: string;
+  footer: string;
+};

@@ -6,14 +6,13 @@ import useSWR from "swr";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatDateTime, formatIstDate, formatMoney } from "@/lib/format";
 import { INVOICE_SOURCE_LABELS, INVOICE_STATUS_COLORS, INVOICE_STATUS_LABELS } from "@/lib/constants";
-import type { Invoice } from "@/types/models";
+import type { Invoice, InvoiceCompany } from "@/types/models";
+import InvoiceView from "../InvoiceView";
 
-export default function InvoiceDetailClient({ id }: { id: string }) {
+export default function InvoiceDetailClient({ id, company }: { id: string; company: InvoiceCompany }) {
   const { data, error, isLoading, mutate } = useSWR<{ invoice: Invoice }>(`/api/invoices/${id}`, fetcher);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  // Bumped after a status change so the PDF preview reloads with the new stamp.
-  const [pdfVersion, setPdfVersion] = useState(0);
 
   if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
   if (error || !data) return <p className="text-sm text-rose-600">{error?.message || "Invoice not found"}</p>;
@@ -26,7 +25,6 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
     try {
       await apiRequest(`/api/invoices/${id}`, "PATCH", { status });
       await mutate();
-      setPdfVersion((v) => v + 1);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to update invoice");
     } finally {
@@ -91,7 +89,9 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
       </div>
 
       {actionError && (
-        <div className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600 ring-1 ring-rose-200">{actionError}</div>
+        <div className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600 ring-1 ring-rose-200">
+          {actionError}
+        </div>
       )}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_1.4fr]">
@@ -150,7 +150,11 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
               {inv.paymentMethod && <Row label="Payment method" value={inv.paymentMethod} />}
               {inv.razorpayPaymentId && <Row label="Razorpay payment" value={inv.razorpayPaymentId} mono />}
               <Row label="Financial year" value={inv.financialYear} />
-              <Row label="Saved on server" value={inv.pdfPath ? `invoices/${inv.pdfPath}` : "Not yet (re-created on download)"} mono />
+              <Row
+                label="Saved on server"
+                value={inv.pdfPath ? `invoices/${inv.pdfPath}` : "Not yet (re-created on download)"}
+                mono
+              />
               <Row label="Created" value={formatDateTime(inv.createdAt)} />
               {inv.cancelledAt && <Row label="Cancelled" value={formatDateTime(inv.cancelledAt)} />}
             </dl>
@@ -158,12 +162,7 @@ export default function InvoiceDetailClient({ id }: { id: string }) {
           </section>
         </div>
 
-        <iframe
-          key={pdfVersion}
-          title={`Invoice ${inv.invoiceNumber}`}
-          src={`/api/invoices/${id}/pdf?v=${pdfVersion}`}
-          className="h-[80vh] min-h-[500px] w-full rounded-2xl bg-white ring-1 ring-slate-200"
-        />
+        <InvoiceView invoice={inv} company={company} />
       </div>
     </div>
   );

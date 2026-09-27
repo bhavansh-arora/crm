@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatIstDate, formatMoney, formatMonthKey, todayIstDateKey } from "@/lib/format";
 import { INVOICE_SOURCE_LABELS, INVOICE_STATUS_COLORS, INVOICE_STATUS_LABELS } from "@/lib/constants";
-import type { Invoice, InvoiceYearSummary } from "@/types/models";
+import type { Invoice, InvoiceCompany, InvoiceYearSummary } from "@/types/models";
+import InvoiceView from "./InvoiceView";
 
 type Tab = "invoices" | "records";
 
@@ -18,10 +19,10 @@ type ImportResult = {
 };
 
 export default function InvoicesClient({
-  companyName,
+  company,
   razorpayConfigured,
 }: {
-  companyName: string;
+  company: InvoiceCompany;
   razorpayConfigured: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("invoices");
@@ -29,6 +30,7 @@ export default function InvoicesClient({
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
   const [showImport, setShowImport] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const params = new URLSearchParams();
   if (month) params.set("month", month);
@@ -62,7 +64,7 @@ export default function InvoicesClient({
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Invoices</h1>
           <p className="text-sm text-slate-500">
-            Issued as {companyName} — saved on the server with monthly and yearly registers.
+            Issued as {company.name} — saved on the server with monthly and yearly registers.
           </p>
         </div>
         <div className="flex gap-2">
@@ -122,7 +124,7 @@ export default function InvoicesClient({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search number, customer, email, payment ID"
-              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              className="order-last w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm sm:order-none sm:w-auto sm:flex-1"
             />
             {month && (
               <button
@@ -157,39 +159,131 @@ export default function InvoicesClient({
 
           <div className="space-y-2">
             {invoices.map((inv) => (
-              <Link
-                key={inv.id}
-                href={`/invoices/${inv.id}`}
-                className="flex items-center justify-between gap-3 rounded-xl bg-white p-3.5 shadow-sm ring-1 ring-slate-200 hover:ring-brand-500"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-sm font-semibold text-slate-900">{inv.invoiceNumber}</span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${INVOICE_STATUS_COLORS[inv.status]}`}
-                    >
-                      {INVOICE_STATUS_LABELS[inv.status]}
-                    </span>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                      {INVOICE_SOURCE_LABELS[inv.source]}
-                    </span>
-                  </div>
-                  <div className="truncate text-sm text-slate-600">
-                    {inv.customerName} · {formatIstDate(inv.invoiceDate)}
-                  </div>
-                </div>
-                <span
-                  className={`shrink-0 font-semibold ${inv.status === "CANCELLED" ? "text-slate-400 line-through" : "text-slate-900"}`}
-                >
-                  {formatMoney(inv.total, inv.currency)}
-                </span>
-              </Link>
+              <InvoiceCard key={inv.id} invoice={inv} onOpen={() => setPreviewId(inv.id)} />
             ))}
           </div>
         </>
       ) : (
         <Records summary={summaryData?.summary} onViewMonth={viewMonth} />
       )}
+
+      {previewId && (
+        <InvoicePreview
+          invoice={invoices.find((i) => i.id === previewId)}
+          company={company}
+          onClose={() => setPreviewId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function InvoiceCard({ invoice: inv, onOpen }: { invoice: Invoice; onOpen: () => void }) {
+  const cancelled = inv.status === "CANCELLED";
+  const contact = [inv.customerEmail, inv.customerPhone].filter(Boolean).join(" · ");
+  const description = inv.items.map((i) => i.description).join(", ");
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="block w-full rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-500"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm font-semibold text-slate-900">{inv.invoiceNumber}</span>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${INVOICE_STATUS_COLORS[inv.status]}`}>
+              {INVOICE_STATUS_LABELS[inv.status]}
+            </span>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+              {INVOICE_SOURCE_LABELS[inv.source]}
+            </span>
+          </div>
+          <div className="mt-1 truncate font-medium text-slate-900">{inv.customerName}</div>
+          {contact && <div className="truncate text-sm text-slate-500">{contact}</div>}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className={`text-lg font-semibold ${cancelled ? "text-slate-400 line-through" : "text-slate-900"}`}>
+            {formatMoney(inv.total, inv.currency)}
+          </div>
+          <div className="text-xs text-slate-500">{formatIstDate(inv.invoiceDate)}</div>
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-xs text-slate-500">
+        <span className="min-w-0 truncate">
+          <span className="text-slate-400">For:</span> {description}
+        </span>
+        {inv.paymentMethod && (
+          <span>
+            <span className="text-slate-400">Paid via:</span> {inv.paymentMethod}
+          </span>
+        )}
+        {inv.lead && (
+          <span>
+            <span className="text-slate-400">Lead:</span> {inv.lead.name}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+// Opens over the list when an invoice is clicked: the full invoice as it
+// appears on the PDF, with download / full-page links.
+function InvoicePreview({
+  invoice,
+  company,
+  onClose,
+}: {
+  invoice: Invoice | undefined;
+  company: InvoiceCompany;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [onClose]);
+
+  if (!invoice) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-3 pb-20 sm:p-6"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Invoice ${invoice.invoiceNumber}`}
+    >
+      <div className="w-full max-w-3xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+          <a
+            href={`/api/invoices/${invoice.id}/pdf?download=1`}
+            className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            Download PDF
+          </a>
+          <Link
+            href={`/invoices/${invoice.id}`}
+            className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+          >
+            Manage invoice
+          </Link>
+          <button
+            onClick={onClose}
+            className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"
+            aria-label="Close"
+          >
+            ✕ Close
+          </button>
+        </div>
+        <InvoiceView invoice={invoice} company={company} />
+      </div>
     </div>
   );
 }

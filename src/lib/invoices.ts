@@ -10,7 +10,7 @@ import { getPayment, isRazorpayConfigured, listPayments, type RazorpayPayment } 
 import { renderInvoicePdf } from "@/lib/invoice-pdf";
 import { computeTotals, round2, type InvoiceItem } from "@/lib/invoice-math";
 
-export { getCompanyDetails } from "@/lib/invoice-pdf";
+export { getCompanyDetails, getPublicCompanyDetails } from "@/lib/invoice-pdf";
 
 // Invoices are stored twice: as rows in the database (the source of truth,
 // used by the UI) and as files on the server's disk under INVOICE_DIR --

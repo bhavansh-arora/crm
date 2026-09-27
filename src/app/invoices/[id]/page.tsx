@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
+import { getPublicCompanyDetails } from "@/lib/invoices";
 import InvoiceDetailClient from "./InvoiceDetailClient";
 
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -11,7 +12,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
   return (
     <AppShell>
-      <InvoiceDetailClient id={id} />
+      <InvoiceDetailClient id={id} company={getPublicCompanyDetails()} />
     </AppShell>
   );
 }

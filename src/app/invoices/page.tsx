@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import AppShell from "@/components/AppShell";
-import { getCompanyDetails } from "@/lib/invoices";
+import { getPublicCompanyDetails } from "@/lib/invoices";
 import InvoicesClient from "./InvoicesClient";
 
 export default async function InvoicesPage() {
@@ -12,7 +12,7 @@ export default async function InvoicesPage() {
   return (
     <AppShell>
       <InvoicesClient
-        companyName={getCompanyDetails().name}
+        company={getPublicCompanyDetails()}
         razorpayConfigured={Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET)}
       />
     </AppShell>
