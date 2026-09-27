@@ -117,9 +117,25 @@ else
   esac
 fi
 
+# The invoices-only site (see src/lib/invoices-host.ts) is the same app
+# container behind a second hostname. Set INVOICES_DOMAIN in .env to use a
+# different hostname, or INVOICES_DOMAIN="none" to skip it. Point the
+# hostname's DNS A record at this server's IP; Caddy gets the HTTPS
+# certificate on its own once DNS resolves.
+INVOICES_DOMAIN="$(grep '^INVOICES_DOMAIN=' .env | cut -d'"' -f2 || true)"
+INVOICES_DOMAIN="${INVOICES_DOMAIN:-invoices.codebunny.net}"
+if [ "$INVOICES_DOMAIN" != "none" ] && [ -f Caddyfile ] && ! grep -q "^$INVOICES_DOMAIN\b" Caddyfile; then
+  echo "==> Adding $INVOICES_DOMAIN to the Caddyfile..."
+  # Appended (not rewritten) so the file's inode -- and the container's
+  # bind mount of it -- stays the same, and hand-added sites are kept.
+  printf '\n%s {\n\treverse_proxy app:3000\n}\n' "$INVOICES_DOMAIN" >> Caddyfile
+fi
+
 echo ""
 echo "==> Building and starting the app (first build takes a few minutes)..."
 docker compose up -d --build
+# Pick up any Caddyfile changes (e.g. the invoices site added above).
+docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 || docker compose restart caddy
 
 echo "==> Scheduling the follow-up reminder check every 10 minutes..."
 CRON_SECRET_VALUE="$(grep '^CRON_SECRET=' .env | cut -d'"' -f2)"
@@ -147,6 +163,9 @@ else
   echo " (recommended before real passwords/data go in)."
 fi
 echo ""
+if [ "$INVOICES_DOMAIN" != "none" ]; then
+  echo " Invoices: https://$INVOICES_DOMAIN  (needs a DNS A record -> $SERVER_IP)"
+fi
 echo " Logs:     cd $APP_DIR && docker compose logs -f"
 echo " Redeploy: cd $APP_DIR && bash deploy/setup-vps.sh"
 echo "==================================================================="

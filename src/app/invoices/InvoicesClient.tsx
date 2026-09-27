@@ -2,14 +2,22 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import useSWR from "swr";
+import useSWR, { mutate as mutateKey } from "swr";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatIstDate, formatMoney, formatMonthKey, todayIstDateKey } from "@/lib/format";
 import { INVOICE_SOURCE_LABELS, INVOICE_STATUS_COLORS, INVOICE_STATUS_LABELS } from "@/lib/constants";
 import type { Invoice, InvoiceCompany, InvoiceYearSummary } from "@/types/models";
 import InvoiceView from "./InvoiceView";
+import InvoiceDashboard from "./InvoiceDashboard";
+import InvoiceCard from "./InvoiceCard";
 
-type Tab = "invoices" | "records";
+type Tab = "dashboard" | "invoices" | "records";
+
+const TAB_LABELS: Record<Tab, string> = {
+  dashboard: "Dashboard",
+  invoices: "Invoices",
+  records: "Monthly / yearly",
+};
 
 type ImportResult = {
   created: number;
@@ -25,12 +33,12 @@ export default function InvoicesClient({
   company: InvoiceCompany;
   razorpayConfigured: boolean;
 }) {
-  const [tab, setTab] = useState<Tab>("invoices");
+  const [tab, setTab] = useState<Tab>("dashboard");
   const [month, setMonth] = useState(todayIstDateKey().slice(0, 7));
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
   const [showImport, setShowImport] = useState(false);
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Invoice | null>(null);
 
   const params = new URLSearchParams();
   if (month) params.set("month", month);
@@ -49,6 +57,7 @@ export default function InvoicesClient({
   function refresh() {
     mutate();
     mutateSummary();
+    mutateKey("/api/invoices/dashboard");
   }
 
   function viewMonth(key: string) {
@@ -86,18 +95,20 @@ export default function InvoicesClient({
       {showImport && <RazorpayImport configured={razorpayConfigured} onImported={refresh} />}
 
       <div className="mb-4 flex gap-1 rounded-xl bg-slate-100 p-1 text-sm font-medium sm:inline-flex">
-        {(["invoices", "records"] as Tab[]).map((t) => (
+        {(["dashboard", "invoices", "records"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`flex-1 whitespace-nowrap rounded-lg px-4 py-1.5 ${tab === t ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+            className={`flex-1 whitespace-nowrap rounded-lg px-3 py-1.5 sm:px-4 ${tab === t ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
           >
-            {t === "invoices" ? "Invoices" : "Monthly & yearly records"}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
 
-      {tab === "invoices" ? (
+      {tab === "dashboard" ? (
+        <InvoiceDashboard onOpenInvoice={setPreview} onViewMonth={viewMonth} />
+      ) : tab === "invoices" ? (
         <>
           <div className="mb-4 flex flex-wrap gap-2">
             <input
@@ -159,7 +170,7 @@ export default function InvoicesClient({
 
           <div className="space-y-2">
             {invoices.map((inv) => (
-              <InvoiceCard key={inv.id} invoice={inv} onOpen={() => setPreviewId(inv.id)} />
+              <InvoiceCard key={inv.id} invoice={inv} onOpen={() => setPreview(inv)} />
             ))}
           </div>
         </>
@@ -167,64 +178,8 @@ export default function InvoicesClient({
         <Records summary={summaryData?.summary} onViewMonth={viewMonth} />
       )}
 
-      {previewId && (
-        <InvoicePreview
-          invoice={invoices.find((i) => i.id === previewId)}
-          company={company}
-          onClose={() => setPreviewId(null)}
-        />
-      )}
+      {preview && <InvoicePreview invoice={preview} company={company} onClose={() => setPreview(null)} />}
     </div>
-  );
-}
-
-function InvoiceCard({ invoice: inv, onOpen }: { invoice: Invoice; onOpen: () => void }) {
-  const cancelled = inv.status === "CANCELLED";
-  const contact = [inv.customerEmail, inv.customerPhone].filter(Boolean).join(" · ");
-  const description = inv.items.map((i) => i.description).join(", ");
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="block w-full rounded-xl bg-white p-4 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-500"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-semibold text-slate-900">{inv.invoiceNumber}</span>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${INVOICE_STATUS_COLORS[inv.status]}`}>
-              {INVOICE_STATUS_LABELS[inv.status]}
-            </span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-              {INVOICE_SOURCE_LABELS[inv.source]}
-            </span>
-          </div>
-          <div className="mt-1 truncate font-medium text-slate-900">{inv.customerName}</div>
-          {contact && <div className="truncate text-sm text-slate-500">{contact}</div>}
-        </div>
-        <div className="shrink-0 text-right">
-          <div className={`text-lg font-semibold ${cancelled ? "text-slate-400 line-through" : "text-slate-900"}`}>
-            {formatMoney(inv.total, inv.currency)}
-          </div>
-          <div className="text-xs text-slate-500">{formatIstDate(inv.invoiceDate)}</div>
-        </div>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-xs text-slate-500">
-        <span className="min-w-0 truncate">
-          <span className="text-slate-400">For:</span> {description}
-        </span>
-        {inv.paymentMethod && (
-          <span>
-            <span className="text-slate-400">Paid via:</span> {inv.paymentMethod}
-          </span>
-        )}
-        {inv.lead && (
-          <span>
-            <span className="text-slate-400">Lead:</span> {inv.lead.name}
-          </span>
-        )}
-      </div>
-    </button>
   );
 }
 
@@ -235,7 +190,7 @@ function InvoicePreview({
   company,
   onClose,
 }: {
-  invoice: Invoice | undefined;
+  invoice: Invoice;
   company: InvoiceCompany;
   onClose: () => void;
 }) {
@@ -249,8 +204,6 @@ function InvoicePreview({
       document.body.style.overflow = overflow;
     };
   }, [onClose]);
-
-  if (!invoice) return null;
 
   return (
     <div

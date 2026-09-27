@@ -247,7 +247,17 @@ Redeploy/restart after setting these.
 
 ## Invoices
 
-Admins get an **Invoices** page (top nav / mobile menu) for invoices issued
+**invoices.codebunny.net** is an invoices-only site served by the same app.
+It has its own "CodeBunny Invoices" login page, a dashboard (this month,
+this financial year, received, unpaid, a 12-month chart, recent invoices,
+top customers), and only the invoice pages in its menu. Admin accounts can
+sign in there; sales reps get an "admins only" message. To set it up, add a
+DNS **A record** `invoices` → your VPS IP, then re-run
+`bash deploy/setup-vps.sh`, which adds the site to the Caddyfile and reloads
+Caddy. HTTPS is issued automatically once the DNS record resolves. Set
+`INVOICES_DOMAIN` in `.env` to use a different hostname, or `"none"` to skip it.
+
+In the CRM itself, admins get the same **Invoices** page (top nav / mobile menu) for invoices issued
 as **CodeBunny, A8, Flower Valley, VIP Road, Raipur - 492001,
 info@codebunny.net**. These are built in; override them with the
 `INVOICE_COMPANY_*` settings in `.env` if they change. GST is off for now:

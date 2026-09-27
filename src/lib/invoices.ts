@@ -684,3 +684,82 @@ export function pdfResponse(invoiceNumber: string, pdf: Buffer, download: boolea
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
+
+export type InvoiceDashboard = {
+  thisMonth: PeriodTotals & { month: string };
+  lastMonth: PeriodTotals & { month: string };
+  thisYear: PeriodTotals & { financialYear: string };
+  unpaid: { count: number; total: number };
+  // Last 12 months, oldest first, including months with no invoices.
+  months: { month: string; total: number; count: number }[];
+  topCustomers: { name: string; total: number; count: number }[];
+  recent: Invoice[];
+};
+
+function shiftMonth(monthKey: string, delta: number): string {
+  const [y, m] = monthKey.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export async function getInvoiceDashboard(): Promise<InvoiceDashboard> {
+  const now = new Date();
+  const currentMonth = monthKeyOf(now);
+  const firstMonth = shiftMonth(currentMonth, -11);
+  const fy = financialYearOf(now);
+  const fyStart = financialYearRange(fy).start;
+  const windowStart = monthRange(firstMonth).start;
+  const since = fyStart < windowStart ? fyStart : windowStart;
+
+  const [invoices, unpaidInvoices, recent] = await Promise.all([
+    prisma.invoice.findMany({
+      where: { invoiceDate: { gte: since }, status: { not: "CANCELLED" } },
+      select: { invoiceDate: true, financialYear: true, status: true, subtotal: true, taxAmount: true, total: true, customerName: true },
+    }),
+    prisma.invoice.findMany({ where: { status: "UNPAID" }, select: { total: true } }),
+    prisma.invoice.findMany({ orderBy: [{ invoiceDate: "desc" }, { sequence: "desc" }], take: 6 }),
+  ]);
+
+  const thisMonth = { month: currentMonth, ...emptyTotals() };
+  const lastMonth = { month: shiftMonth(currentMonth, -1), ...emptyTotals() };
+  const thisYear = { financialYear: fy, ...emptyTotals() };
+  const monthTotals = new Map<string, { total: number; count: number }>();
+  for (let i = 0; i < 12; i++) monthTotals.set(shiftMonth(firstMonth, i), { total: 0, count: 0 });
+  const customers = new Map<string, { name: string; total: number; count: number }>();
+
+  for (const inv of invoices) {
+    const key = monthKeyOf(inv.invoiceDate);
+    if (key === thisMonth.month) addToTotals(thisMonth, inv);
+    if (key === lastMonth.month) addToTotals(lastMonth, inv);
+    const bucket = monthTotals.get(key);
+    if (bucket) {
+      bucket.total = round2(bucket.total + inv.total);
+      bucket.count += 1;
+    }
+    if (inv.financialYear === fy) {
+      addToTotals(thisYear, inv);
+      const id = inv.customerName.trim().toLowerCase();
+      const c = customers.get(id) || { name: inv.customerName.trim(), total: 0, count: 0 };
+      c.total = round2(c.total + inv.total);
+      c.count += 1;
+      customers.set(id, c);
+    }
+  }
+
+  return {
+    thisMonth,
+    lastMonth,
+    thisYear,
+    unpaid: {
+      count: unpaidInvoices.length,
+      total: round2(unpaidInvoices.reduce((s, i) => s + i.total, 0)),
+    },
+    months: [...monthTotals.entries()].map(([month, v]) => ({ month, ...v })),
+    topCustomers: [...customers.values()].sort((a, b) => b.total - a.total).slice(0, 5),
+    recent,
+  };
+}

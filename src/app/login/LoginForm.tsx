@@ -4,7 +4,7 @@ import { useState, type FormEvent } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginForm() {
+export default function LoginForm({ invoicesSite = false }: { invoicesSite?: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -30,7 +30,7 @@ export default function LoginForm() {
       return;
     }
 
-    router.push(searchParams.get("callbackUrl") || "/");
+    router.push(searchParams.get("callbackUrl") || (invoicesSite ? "/invoices" : "/"));
     router.refresh();
   }
 
@@ -39,17 +39,19 @@ export default function LoginForm() {
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-xl font-bold text-white">
-            C
+            {invoicesSite ? "🧾" : "C"}
           </div>
-          <h1 className="text-2xl font-semibold text-slate-900">Sign in to CRM</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage leads, calls, and follow-ups</p>
+          <h1 className="text-2xl font-semibold text-slate-900">
+            {invoicesSite ? "CodeBunny Invoices" : "Sign in to CRM"}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {invoicesSite ? "Sign in to create, view and download invoices" : "Manage leads, calls, and follow-ups"}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
           {error && (
-            <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600 ring-1 ring-rose-200">
-              {error}
-            </div>
+            <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600 ring-1 ring-rose-200">{error}</div>
           )}
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>

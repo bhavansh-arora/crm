@@ -166,3 +166,13 @@ export type InvoiceCompany = {
   website: string;
   footer: string;
 };
+
+export type InvoiceDashboardData = {
+  thisMonth: InvoicePeriodTotals & { month: string };
+  lastMonth: InvoicePeriodTotals & { month: string };
+  thisYear: InvoicePeriodTotals & { financialYear: string };
+  unpaid: { count: number; total: number };
+  months: { month: string; total: number; count: number }[];
+  topCustomers: { name: string; total: number; count: number }[];
+  recent: Invoice[];
+};

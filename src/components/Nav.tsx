@@ -24,6 +24,12 @@ const ADMIN_SECONDARY_ITEMS: NavItem[] = [
   { href: "/templates", label: "WhatsApp Templates", icon: "💬" },
 ];
 
+// invoices.codebunny.net: just the invoicing pages.
+const INVOICE_SITE_ITEMS: NavItem[] = [
+  { href: "/invoices", label: "Invoices", icon: "🧾" },
+  { href: "/invoices/new", label: "New invoice", icon: "➕" },
+];
+
 const REP_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/leads", label: "My Leads", icon: "🗂️" },
@@ -31,18 +37,27 @@ const REP_ITEMS: NavItem[] = [
   { href: "/followups", label: "Follow-ups", icon: "⏰" },
 ];
 
-const REP_SECONDARY_ITEMS: NavItem[] = [
-  { href: "/templates", label: "WhatsApp Templates", icon: "💬" },
-];
+const REP_SECONDARY_ITEMS: NavItem[] = [{ href: "/templates", label: "WhatsApp Templates", icon: "💬" }];
 
-export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SALES_REP" }) {
+export default function Nav({
+  name,
+  role,
+  invoicesSite = false,
+}: {
+  name: string;
+  role: "ADMIN" | "SALES_REP";
+  invoicesSite?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const items = role === "ADMIN" ? ADMIN_ITEMS : REP_ITEMS;
-  const secondaryItems = role === "ADMIN" ? ADMIN_SECONDARY_ITEMS : REP_SECONDARY_ITEMS;
+  const items = invoicesSite ? INVOICE_SITE_ITEMS : role === "ADMIN" ? ADMIN_ITEMS : REP_ITEMS;
+  const secondaryItems = invoicesSite ? [] : role === "ADMIN" ? ADMIN_SECONDARY_ITEMS : REP_SECONDARY_ITEMS;
 
   function isActive(href: string) {
+    // On the invoices site "/invoices/new" is its own tab, so "Invoices"
+    // shouldn't also light up there.
+    if (invoicesSite && href === "/invoices") return pathname === href || /^\/invoices\/(?!new)/.test(pathname);
     return pathname === href || pathname.startsWith(href + "/");
   }
 
@@ -54,7 +69,7 @@ export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SAL
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white">
               C
             </div>
-            <span className="text-lg font-semibold">CRM</span>
+            <span className="text-lg font-semibold">{invoicesSite ? "CodeBunny Invoices" : "CRM"}</span>
           </div>
 
           <nav className="hidden items-center gap-1 md:flex">
@@ -63,9 +78,7 @@ export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SAL
                 key={item.href}
                 href={item.href}
                 className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  isActive(item.href)
-                    ? "bg-brand-50 text-brand-700"
-                    : "text-slate-600 hover:bg-slate-100"
+                  isActive(item.href) ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 {item.label}
@@ -101,9 +114,7 @@ export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SAL
                   href={item.href}
                   onClick={() => setOpen(false)}
                   className={`rounded-lg px-3 py-2 text-sm font-medium ${
-                    isActive(item.href)
-                      ? "bg-brand-50 text-brand-700"
-                      : "text-slate-600 hover:bg-slate-100"
+                    isActive(item.href) ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
                   {item.icon} {item.label}
@@ -124,7 +135,10 @@ export default function Nav({ name, role }: { name: string; role: "ADMIN" | "SAL
       </header>
 
       {/* Bottom tab bar for quick mobile access */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid border-t border-slate-200 bg-white md:hidden" style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}>
+      <nav
+        className="fixed inset-x-0 bottom-0 z-30 grid border-t border-slate-200 bg-white md:hidden"
+        style={{ gridTemplateColumns: `repeat(${items.length}, 1fr)` }}
+      >
         {items.map((item) => (
           <Link
             key={item.href}

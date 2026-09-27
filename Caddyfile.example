@@ -9,3 +9,8 @@
 :80 {
 	reverse_proxy app:3000
 }
+
+# Invoices-only site, same app (deploy/setup-vps.sh appends this for you):
+# invoices.codebunny.net {
+# 	reverse_proxy app:3000
+# }
