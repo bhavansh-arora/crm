@@ -49,6 +49,10 @@ services:
       # (see /opt/lead-finder-cli) -- read-only since this container only
       # displays them, never writes to them.
       - /opt/lead-finder-cli/lead-finder/demo-site:/srv/demo-site:ro
+      # Serves the Lead Finder CLI's per-run reports (results/<run>/report.html)
+      # at reports.codebunny.net, with directory browsing so old runs stay
+      # reachable without remembering their folder names.
+      - /opt/lead-finder-cli/lead-finder/results:/srv/reports:ro
     depends_on:
       - app
 
