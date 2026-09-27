@@ -109,3 +109,49 @@ export type LeadSource = {
   createdAt: string;
   leadCount: number;
 };
+
+export type InvoiceItem = { description: string; quantity: number; rate: number };
+
+export type Invoice = {
+  id: string;
+  invoiceNumber: string;
+  financialYear: string;
+  invoiceDate: string;
+  source: "MANUAL" | "RAZORPAY" | "API";
+  status: "PAID" | "UNPAID" | "CANCELLED";
+  customerName: string;
+  customerEmail: string | null;
+  customerPhone: string | null;
+  customerAddress: string | null;
+  customerGstin: string | null;
+  items: InvoiceItem[];
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  total: number;
+  currency: string;
+  paymentMethod: string | null;
+  razorpayPaymentId: string | null;
+  notes: string | null;
+  pdfPath: string | null;
+  createdAt: string;
+  cancelledAt: string | null;
+  lead?: { id: string; name: string } | null;
+  createdBy?: { id: string; name: string } | null;
+};
+
+export type InvoicePeriodTotals = {
+  count: number;
+  paidCount: number;
+  unpaidCount: number;
+  cancelledCount: number;
+  subtotal: number;
+  tax: number;
+  total: number;
+  paidTotal: number;
+};
+
+export type InvoiceYearSummary = InvoicePeriodTotals & {
+  financialYear: string;
+  months: (InvoicePeriodTotals & { month: string })[];
+};

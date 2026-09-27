@@ -65,3 +65,40 @@ export async function createPaymentLink(params: {
 export async function getPaymentLink(razorpayId: string): Promise<RazorpayPaymentLink> {
   return razorpayRequest<RazorpayPaymentLink>(`/payment_links/${razorpayId}`, { method: "GET" });
 }
+
+// https://razorpay.com/docs/api/payments/
+export type RazorpayPayment = {
+  id: string;
+  amount: number; // paise
+  currency: string;
+  status: "created" | "authorized" | "captured" | "refunded" | "failed";
+  method: string;
+  description: string | null;
+  email: string | null;
+  contact: string | null;
+  notes: Record<string, string> | unknown[];
+  order_id: string | null;
+  created_at: number; // unix seconds
+};
+
+export async function getPayment(paymentId: string): Promise<RazorpayPayment> {
+  return razorpayRequest<RazorpayPayment>(`/payments/${encodeURIComponent(paymentId)}`, { method: "GET" });
+}
+
+// All payments created between two dates (any status -- callers filter to
+// captured ones). Razorpay caps a page at 100, so this pages through with
+// `skip` up to maxPayments.
+export async function listPayments(from: Date, to: Date, maxPayments = 2000): Promise<RazorpayPayment[]> {
+  const all: RazorpayPayment[] = [];
+  const fromTs = Math.floor(from.getTime() / 1000);
+  const toTs = Math.floor(to.getTime() / 1000);
+  for (let skip = 0; skip < maxPayments; skip += 100) {
+    const page = await razorpayRequest<{ items: RazorpayPayment[] }>(
+      `/payments?from=${fromTs}&to=${toTs}&count=100&skip=${skip}`,
+      { method: "GET" }
+    );
+    all.push(...page.items);
+    if (page.items.length < 100) break;
+  }
+  return all;
+}

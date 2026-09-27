@@ -246,6 +246,12 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
             >
               {editing ? "Close editor" : "Edit details"}
             </button>
+            <Link
+              href={`/invoices/new?leadId=${lead.id}`}
+              className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+            >
+              Create invoice
+            </Link>
             <button
               onClick={deleteLead}
               className="rounded-lg px-3 py-1.5 text-xs font-medium text-rose-600 ring-1 ring-rose-200 hover:bg-rose-50"

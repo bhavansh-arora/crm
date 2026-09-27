@@ -96,3 +96,35 @@ export function formatDayKey(dateKey: string): string {
     new Date(year, month - 1, day)
   );
 }
+
+// Invoice amounts, to the paisa (formatCurrency above rounds to whole rupees).
+export function formatMoney(value: number, currency = "INR"): string {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+// "2026-09" -> "Sep 2026"
+export function formatMonthKey(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(new Date(year, month - 1, 1));
+}
+
+// Today's date as "YYYY-MM-DD" in IST, for date inputs' defaults.
+export function todayIstDateKey(): string {
+  return new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+// Invoice dates are IST calendar days (stored as IST midnight), so they're
+// always shown in IST -- otherwise a viewer west of India sees the day before.
+export function formatIstDate(date: Date | string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  }).format(new Date(date));
+}

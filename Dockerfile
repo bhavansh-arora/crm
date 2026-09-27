@@ -52,7 +52,7 @@ COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 # Created (and owned by the app user) before USER drops root, so the named
 # volume mounted here at runtime inherits correct ownership on first use.
-RUN mkdir -p ./uploads && chown nextjs:nodejs ./uploads
+RUN mkdir -p ./uploads ./invoices && chown nextjs:nodejs ./uploads ./invoices
 
 USER nextjs
 EXPOSE 3000

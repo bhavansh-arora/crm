@@ -13,21 +13,22 @@ datasource db {
 // src/lib/constants.ts and are enforced at the API layer with zod.
 
 model User {
-  id           String     @id @default(cuid())
+  id           String    @id @default(cuid())
   name         String
-  email        String     @unique
+  email        String    @unique
   passwordHash String
-  role         String     @default("SALES_REP") // "ADMIN" | "SALES_REP"
-  active       Boolean    @default(true)
-  createdAt    DateTime   @default(now())
+  role         String    @default("SALES_REP") // "ADMIN" | "SALES_REP"
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
   lastActiveAt DateTime?
 
-  leads             Lead[]       @relation("AssignedLeads")
+  leads             Lead[]             @relation("AssignedLeads")
   activities        Activity[]
   followUps         FollowUp[]
   paymentLinks      PaymentLink[]
   whatsAppTemplates WhatsAppTemplate[]
   heartbeatLogs     HeartbeatLog[]
+  invoices          Invoice[]
 }
 
 // One row per heartbeat ping (throttled to roughly one per minute of active
@@ -83,6 +84,7 @@ model Lead {
   activities   Activity[]
   followUps    FollowUp[]
   paymentLinks PaymentLink[]
+  invoices     Invoice[]
 
   @@index([status])
   @@index([assignedToId])
@@ -90,10 +92,10 @@ model Lead {
 }
 
 model Activity {
-  id     String @id @default(cuid())
-  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id     String  @id @default(cuid())
+  lead   Lead    @relation(fields: [leadId], references: [id], onDelete: Cascade)
   leadId String
-  user   User?  @relation(fields: [userId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id])
   userId String?
   type   String // "NOTE" | "CALL" | "STATUS_CHANGE"
 
@@ -143,4 +145,57 @@ model PaymentLink {
 
   @@index([leadId])
   @@index([razorpayId])
+}
+
+// Invoices issued in the business's name (see src/lib/invoices.ts). Numbered
+// sequentially per Indian financial year (Apr-Mar), e.g. "CB/2026-27/0001",
+// as GST rules require -- InvoiceCounter hands out the next number inside the
+// same transaction that creates the invoice, so numbers never skip or repeat.
+// Invoices are never deleted or edited once issued, only cancelled, so the
+// monthly/yearly registers always account for every number.
+model Invoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique
+  financialYear String // "2026-27"
+  sequence      Int
+  invoiceDate   DateTime
+  source        String // "MANUAL" | "RAZORPAY" | "API"
+  status        String   @default("PAID") // "PAID" | "UNPAID" | "CANCELLED"
+
+  customerName    String
+  customerEmail   String?
+  customerPhone   String?
+  customerAddress String?
+  customerGstin   String?
+
+  // [{ description, quantity, rate }] -- amounts in rupees
+  items     Json
+  subtotal  Float
+  taxRate   Float  @default(0) // percent, e.g. 18
+  taxAmount Float  @default(0)
+  total     Float
+  currency  String @default("INR")
+
+  paymentMethod     String?
+  razorpayPaymentId String? @unique
+  notes             String?
+
+  // Where the PDF lives on the server's disk, relative to INVOICE_DIR
+  pdfPath String?
+
+  lead        Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId      String?
+  createdBy   User?     @relation(fields: [createdById], references: [id])
+  createdById String?
+  createdAt   DateTime  @default(now())
+  cancelledAt DateTime?
+
+  @@unique([financialYear, sequence])
+  @@index([invoiceDate])
+  @@index([status])
+}
+
+model InvoiceCounter {
+  financialYear String @id
+  lastSequence  Int    @default(0)
 }

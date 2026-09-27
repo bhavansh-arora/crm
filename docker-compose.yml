@@ -27,6 +27,8 @@ services:
         condition: service_healthy
     volumes:
       - uploads-data:/app/uploads
+      # Invoice PDFs + monthly/yearly register CSVs (see src/lib/invoices.ts)
+      - invoices-data:/app/invoices
     expose:
       - "3000"
 
@@ -53,3 +55,4 @@ volumes:
   caddy-config:
   postgres-data:
   uploads-data:
+  invoices-data:

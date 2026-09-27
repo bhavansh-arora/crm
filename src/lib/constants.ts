@@ -94,3 +94,19 @@ export const PAYMENT_LINK_STATUS_COLORS: Record<PaymentLinkStatusValue, string> 
   EXPIRED: "bg-slate-100 text-slate-500",
   CANCELLED: "bg-rose-100 text-rose-700",
 };
+
+export const INVOICE_STATUS_LABELS: Record<string, string> = {
+  PAID: "Paid",
+  UNPAID: "Unpaid",
+  CANCELLED: "Cancelled",
+};
+export const INVOICE_STATUS_COLORS: Record<string, string> = {
+  PAID: "bg-emerald-100 text-emerald-700",
+  UNPAID: "bg-amber-100 text-amber-700",
+  CANCELLED: "bg-rose-100 text-rose-700",
+};
+export const INVOICE_SOURCE_LABELS: Record<string, string> = {
+  MANUAL: "Manual",
+  RAZORPAY: "Razorpay",
+  API: "API",
+};

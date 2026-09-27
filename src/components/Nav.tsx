@@ -17,6 +17,7 @@ const ADMIN_ITEMS: NavItem[] = [
 // Shown in the top nav / mobile menu but not the bottom tab bar, to keep
 // that bar to the 4 most-used destinations.
 const ADMIN_SECONDARY_ITEMS: NavItem[] = [
+  { href: "/invoices", label: "Invoices", icon: "🧾" },
   { href: "/dialer", label: "Dialer", icon: "📞" },
   { href: "/sources", label: "Sources", icon: "🏷️" },
   { href: "/activity", label: "Activity", icon: "📈" },
