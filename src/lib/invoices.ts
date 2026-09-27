@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "fs/promises";
 import { NextResponse } from "next/server";
 import path from "path";
 import { z } from "zod";
@@ -337,7 +337,7 @@ export async function setInvoiceStatus(id: string, status: InvoiceStatusValue): 
 // Files on disk
 // ---------------------------------------------------------------------------
 
-function invoiceRelativePath(invoice: Pick<Invoice, "financialYear" | "invoiceDate" | "invoiceNumber">): string {
+export function invoiceRelativePath(invoice: Pick<Invoice, "financialYear" | "invoiceDate" | "invoiceNumber">): string {
   const filename = `${invoice.invoiceNumber.replace(/[^A-Za-z0-9-]/g, "_")}.pdf`;
   return path.join(`FY${invoice.financialYear}`, monthKeyOf(invoice.invoiceDate), filename);
 }
@@ -391,6 +391,109 @@ async function writeRegisters(financialYear: string, monthKey: string) {
   } catch (error) {
     console.error(`Could not write invoice registers for FY${financialYear}/${monthKey}:`, error);
   }
+}
+
+// One-off maintenance: reassigns sequence numbers within a financial year so
+// they run in invoiceDate order. Needed after backfilling an older month
+// via "Sync from Razorpay" *after* a later month was already synced -- the
+// counter hands out numbers in creation order, not invoice-date order, so
+// the later-dated invoices ended up with lower numbers. Dry-run by default
+// (opts.apply must be explicitly true to write anything). Cancelled
+// invoices are included (they keep a slot in the sequence, per the
+// existing cancel behavior) -- only their number may move, never their
+// status/date/amount. Same-date invoices keep their relative order.
+export async function renumberFinancialYear(
+  financialYear: string,
+  opts: { apply: boolean }
+): Promise<{
+  financialYear: string;
+  total: number;
+  changed: { id: string; invoiceDate: string; oldNumber: string; newNumber: string }[];
+  applied: boolean;
+}> {
+  const invoices = await prisma.invoice.findMany({
+    where: { financialYear },
+    orderBy: [{ invoiceDate: "asc" }, { sequence: "asc" }],
+  });
+
+  const plan = invoices.map((inv, i) => ({
+    id: inv.id,
+    invoiceDate: inv.invoiceDate,
+    oldSequence: inv.sequence,
+    oldNumber: inv.invoiceNumber,
+    newSequence: i + 1,
+    newNumber: `${INVOICE_PREFIX}/${financialYear}/${String(i + 1).padStart(4, "0")}`,
+  }));
+  const changed = plan.filter((p) => p.oldSequence !== p.newSequence);
+
+  if (!opts.apply) {
+    return {
+      financialYear,
+      total: invoices.length,
+      changed: changed.map((c) => ({
+        id: c.id,
+        invoiceDate: c.invoiceDate.toISOString(),
+        oldNumber: c.oldNumber,
+        newNumber: c.newNumber,
+      })),
+      applied: false,
+    };
+  }
+
+  // Two phases so the @@unique([financialYear, sequence]) / invoiceNumber
+  // constraints never see a collision: first move every changed row to a
+  // guaranteed-clear temporary slot, then set them all to their real,
+  // final (and mutually exclusive) numbers.
+  await prisma.$transaction(
+    changed.map((c) =>
+      prisma.invoice.update({
+        where: { id: c.id },
+        data: { sequence: c.newSequence + 1_000_000, invoiceNumber: `TMP-${c.id}` },
+      })
+    )
+  );
+  await prisma.$transaction(
+    changed.map((c) =>
+      prisma.invoice.update({
+        where: { id: c.id },
+        data: { sequence: c.newSequence, invoiceNumber: c.newNumber },
+      })
+    )
+  );
+  await prisma.invoiceCounter.upsert({
+    where: { financialYear },
+    create: { financialYear, lastSequence: invoices.length },
+    update: { lastSequence: invoices.length },
+  });
+
+  // Regenerate the PDF (new filename) and clean up the old one, then
+  // refresh whichever months' registers were touched.
+  const monthsTouched = new Set<string>();
+  for (const c of changed) {
+    const before = invoices.find((inv) => inv.id === c.id)!;
+    const oldRelative = invoiceRelativePath(before);
+    const fresh = await prisma.invoice.findUniqueOrThrow({ where: { id: c.id } });
+    await saveInvoiceFiles(fresh);
+    if (oldRelative !== invoiceRelativePath(fresh)) {
+      await unlink(path.join(INVOICE_DIR, oldRelative)).catch(() => {});
+    }
+    monthsTouched.add(monthKeyOf(fresh.invoiceDate));
+  }
+  for (const monthKey of monthsTouched) {
+    await writeRegisters(financialYear, monthKey);
+  }
+
+  return {
+    financialYear,
+    total: invoices.length,
+    changed: changed.map((c) => ({
+      id: c.id,
+      invoiceDate: c.invoiceDate.toISOString(),
+      oldNumber: c.oldNumber,
+      newNumber: c.newNumber,
+    })),
+    applied: true,
+  };
 }
 
 // ---------------------------------------------------------------------------
