@@ -34,7 +34,12 @@ export default function InvoicesClient({
   razorpayConfigured: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("dashboard");
-  const [month, setMonth] = useState(todayIstDateKey().slice(0, 7));
+  // Starts on "All months" rather than the current month -- defaulting to the
+  // current month made every earlier month (including ones with real
+  // invoices, e.g. backfilled from before this feature existed) invisible
+  // the moment an admin opened the Invoices tab, unless they noticed and
+  // cleared the filter themselves.
+  const [month, setMonth] = useState("");
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
   const [showImport, setShowImport] = useState(false);

@@ -127,7 +127,16 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
-      <button onClick={() => router.push("/leads")} className="text-sm text-slate-500 hover:text-slate-700">
+      <button
+        onClick={() => {
+          // router.back() restores the leads list exactly as it was (filters,
+          // search, sort, scroll) since those live in that page's URL; a plain
+          // push("/leads") would instead land on a fresh, filter-less URL.
+          if (typeof window !== "undefined" && window.history.length > 1) router.back();
+          else router.push("/leads");
+        }}
+        className="text-sm text-slate-500 hover:text-slate-700"
+      >
         ← Back to leads
       </button>
 
