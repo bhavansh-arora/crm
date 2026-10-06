@@ -13,6 +13,7 @@ const leadSchema = z.object({
   phone: z.string().min(1),
   website: z.string().optional(),
   email: z.string().email().optional().or(z.literal("")),
+  assignedToId: z.string().optional(),
 });
 
 const bodySchema = z.object({
@@ -55,6 +56,17 @@ export async function POST(req: NextRequest) {
   // each create()'s result is added to the lookup before the next check.
   const phoneLookup = await loadPhoneLookup();
 
+  // Validated once for the whole batch, same reasoning as phoneLookup above
+  // -- an assignedToId naming a user who's been deactivated or deleted since
+  // the Leads Finder last fetched its team list would otherwise fail the
+  // create with a foreign-key error; silently leaving those leads
+  // unassigned is safer than rejecting the whole batch over one stale id.
+  const activeUserIds = new Set(
+    (await prisma.user.findMany({ where: { active: true }, select: { id: true } })).map(
+      (u) => u.id
+    )
+  );
+
   for (const lead of data.leads) {
     const phone = lead.phone.trim();
     const normalized = normalizePhone(phone);
@@ -62,6 +74,9 @@ export async function POST(req: NextRequest) {
       results.push({ phone, status: "duplicate" });
       continue;
     }
+
+    const assignedToId =
+      lead.assignedToId && activeUserIds.has(lead.assignedToId) ? lead.assignedToId : null;
 
     const newLead = await prisma.lead.create({
       data: {
@@ -73,6 +88,7 @@ export async function POST(req: NextRequest) {
         source: data.source,
         status: "NEW",
         value: 0,
+        assignedToId,
       },
     });
     if (normalized) phoneLookup.set(normalized, { id: newLead.id, name: newLead.name });

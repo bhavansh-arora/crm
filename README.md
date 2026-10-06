@@ -67,9 +67,13 @@ A simple, mobile-friendly CRM for managing leads, sales reps, and follow-ups.
   push leads straight in — used by the companion Leads Finder tool's
   "Push to CRM" button. Dedupes by phone number (a lead already in the
   system under that phone is skipped, not duplicated) and auto-creates the
-  named source if it doesn't already exist as a Lead Source. A matching
-  `GET /api/external/sources` lists current source names, so the pushing
-  tool can offer a picker instead of a fixed, hardcoded source.
+  named source if it doesn't already exist as a Lead Source. Each lead may
+  include an `assignedToId` (a `User.id` from this CRM) to assign it on
+  creation; an id that doesn't match an active user is left unassigned
+  rather than failing the push. A matching `GET /api/external/sources` lists
+  current source names, and `GET /api/external/team` lists active team
+  members (`id`, `name`, `email`), so the pushing tool can offer pickers
+  instead of fixed, hardcoded values.
 - **One-touch calling**: a Call button on every lead dials out via the
   device's phone app (`tel:` link — works great on mobile, needs a
   softphone on desktop). A dedicated Dialer page turns this into a queue:
