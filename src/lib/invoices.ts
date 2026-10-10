@@ -217,7 +217,22 @@ export async function createInvoice(rawInput: InvoiceInput, meta: CreateMeta): P
     });
   });
 
-  return saveInvoiceFiles(invoice);
+  const saved = await saveInvoiceFiles(invoice);
+
+  // The counter above only guarantees a unique, never-repeated number -- it
+  // knows nothing about where this invoice's date actually falls among the
+  // others already in this financial year. Backfilling an older month
+  // (e.g. "Sync from Razorpay" for July) after a later one was already
+  // synced (September) would otherwise leave September with a lower number
+  // than July. Renumbering the whole year after every single insert keeps
+  // numbers permanently in invoiceDate order -- the trade-off, accepted
+  // deliberately, is that a number already issued to a customer can still
+  // move if an even-older invoice shows up later. Cheap when nothing is out
+  // of order (the common case): it's a read of the year's invoices with no
+  // writes unless something actually needs to shift.
+  await renumberFinancialYear(financialYear, { apply: true });
+
+  return prisma.invoice.findUniqueOrThrow({ where: { id: saved.id } });
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -393,12 +408,13 @@ async function writeRegisters(financialYear: string, monthKey: string) {
   }
 }
 
-// One-off maintenance: reassigns sequence numbers within a financial year so
-// they run in invoiceDate order. Needed after backfilling an older month
-// via "Sync from Razorpay" *after* a later month was already synced -- the
-// counter hands out numbers in creation order, not invoice-date order, so
-// the later-dated invoices ended up with lower numbers. Dry-run by default
-// (opts.apply must be explicitly true to write anything). Cancelled
+// Reassigns sequence numbers within a financial year so they run in
+// invoiceDate order. Called automatically at the end of every createInvoice
+// (so numbers stay in date order even across repeated/out-of-order Razorpay
+// syncs), and also exposed as a one-off maintenance endpoint for cleaning up
+// a financial year that went out of order before this ran automatically.
+// Dry-run by default (opts.apply must be explicitly true to write anything).
+// Cancelled
 // invoices are included (they keep a slot in the sequence, per the
 // existing cancel behavior) -- only their number may move, never their
 // status/date/amount. Same-date invoices keep their relative order.

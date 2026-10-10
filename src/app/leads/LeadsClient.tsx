@@ -2,7 +2,7 @@
 
 import useSWR from "swr";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { fetcher, apiRequest } from "@/lib/fetcher";
 import { formatCurrency, formatDateTime, relativeTime } from "@/lib/format";
@@ -59,10 +59,25 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
   // dropped. Local state makes typing always instant; the URL (and the API
   // call it drives) only updates 300ms after the user pauses.
   const [searchInput, setSearchInput] = useState(search);
-  useEffect(() => setSearchInput(search), [search]);
+  // Tracks the last value *we* pushed to the URL, so the sync effect below
+  // can tell "the URL changed because our own debounced update just landed"
+  // (ignore it -- searchInput may have moved on to newer keystrokes already)
+  // from "the URL changed for some other reason, e.g. browser back/forward"
+  // (do sync). Without this, every debounced update's own echo would
+  // overwrite whatever the user had typed in the meantime, dropping a
+  // character on fast typing.
+  const lastSentSearchRef = useRef(search);
+  useEffect(() => {
+    if (search === lastSentSearchRef.current) return;
+    setSearchInput(search);
+    lastSentSearchRef.current = search;
+  }, [search]);
   useEffect(() => {
     if (searchInput === search) return;
-    const t = setTimeout(() => updateParam("search", searchInput), 300);
+    const t = setTimeout(() => {
+      lastSentSearchRef.current = searchInput;
+      updateParam("search", searchInput);
+    }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
