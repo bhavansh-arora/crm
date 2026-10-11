@@ -66,15 +66,16 @@ export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
       {uncontactedCount > 0 && (
         <Link
           href={isAdmin ? "/leads?assignedToId=unassigned&status=NEW" : "/leads?status=NEW"}
-          className="flex items-center justify-between rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-100 hover:ring-amber-300"
+          className="flex items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-100 hover:ring-amber-300"
         >
           <span className="font-medium">
             🆕 {isAdmin ? "New, uncontacted, and unassigned" : "New leads in your kitty"}
           </span>
           <span>
             {uncontactedCount} lead{uncontactedCount !== 1 ? "s" : ""}{" "}
-            {isAdmin ? "waiting to be assigned to a rep" : "not yet contacted"} →
+            {isAdmin ? "waiting to be assigned to a rep" : "not yet contacted"}
           </span>
+          <span aria-hidden="true">→</span>
         </Link>
       )}
 

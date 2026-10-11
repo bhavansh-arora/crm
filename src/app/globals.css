@@ -20,3 +20,12 @@ select,
 textarea {
   @apply outline-none;
 }
+
+/* Every <select>'s own right-padding utility (px-2/px-3/...) has equal
+   specificity to this, so without !important whichever rule happens to
+   come later in the stylesheet would win arbitrarily -- the native dropdown
+   arrow needs reliably more room from the border than left-side padding
+   does, so this is pinned regardless of each select's own px-* class. */
+select {
+  padding-right: 2rem !important;
+}
