@@ -57,7 +57,11 @@ export async function createPaymentLink(params: {
         email: params.customerEmail || undefined,
         contact: params.customerPhone || undefined,
       },
-      notify: { sms: false, email: false },
+      // Lets Razorpay itself SMS/email the customer that a payment is being
+      // requested, with a link to pay -- it silently skips whichever
+      // channel there's no contact info for, so this is safe even when a
+      // lead only has a phone or only an email on file.
+      notify: { sms: true, email: true },
     }),
   });
 }

@@ -31,6 +31,46 @@ export async function sendMail(opts: { to: string; subject: string; text: string
   }
 }
 
+// Fires the moment a rep generates a payment link, before any money has
+// moved -- separate from sendPaymentReceiptEmail below, which only fires
+// once the link is actually paid. Without this, admins had no way to know
+// a link existed until a customer had already paid it.
+export async function sendPaymentLinkCreatedEmail(paymentLink: {
+  amount: number;
+  shortUrl: string;
+  description: string | null;
+  lead: { name: string; company: string | null };
+  createdBy: { name: string } | null;
+}): Promise<void> {
+  if (!isMailConfigured()) {
+    console.log(`Payment link created for "${paymentLink.lead.name}" but SMTP isn't configured — skipping notification`);
+    return;
+  }
+
+  const admins = await prisma.user.findMany({
+    where: { role: "ADMIN", active: true },
+    select: { email: true },
+  });
+
+  // Admins only -- the rep who just created it already knows.
+  const recipients = new Set(admins.map((a) => a.email));
+  if (recipients.size === 0) return;
+
+  const amountFormatted = formatCurrency(paymentLink.amount);
+  const subject = `New payment link created: ${amountFormatted} — ${paymentLink.lead.name}`;
+  const text = [
+    `${paymentLink.createdBy?.name || "A team member"} just created a new payment link.`,
+    "",
+    `Lead: ${paymentLink.lead.name}${paymentLink.lead.company ? ` (${paymentLink.lead.company})` : ""}`,
+    `Amount: ${amountFormatted}`,
+    `Description: ${paymentLink.description || "-"}`,
+    `Payment link: ${paymentLink.shortUrl}`,
+    `Created by: ${paymentLink.createdBy?.name || "Unknown"}`,
+  ].join("\n");
+
+  await Promise.all([...recipients].map((to) => sendMail({ to, subject, text })));
+}
+
 export async function sendPaymentReceiptEmail(paymentLink: {
   amount: number;
   shortUrl: string;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireSession, ApiError, handleApiError } from "@/lib/api-auth";
 import { createPaymentLink, isRazorpayConfigured } from "@/lib/razorpay";
+import { sendPaymentLinkCreatedEmail } from "@/lib/mail";
 
 const createSchema = z.object({
   amount: z.coerce.number().positive("Amount must be greater than 0"),
@@ -48,6 +49,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
       include: { createdBy: { select: { id: true, name: true } } },
     });
+
+    // Fire-and-forget -- a slow or failed notification shouldn't hold up
+    // the response or fail a payment link that was already created.
+    sendPaymentLinkCreatedEmail({
+      amount: paymentLink.amount,
+      shortUrl: paymentLink.shortUrl,
+      description: paymentLink.description,
+      lead: { name: lead.name, company: lead.company },
+      createdBy: paymentLink.createdBy ? { name: paymentLink.createdBy.name } : null,
+    }).catch((err) => console.error("Failed to send payment-link-created notification", err));
 
     return NextResponse.json({ paymentLink }, { status: 201 });
   } catch (error) {

@@ -977,6 +977,16 @@ function PaymentLinksSection({
   const [creating, setCreating] = useState(false);
 
   async function createLink() {
+    // This hits Razorpay and makes a real, chargeable link the moment it
+    // succeeds -- there's no "draft" state to edit afterward, so the last
+    // chance to catch a typo'd amount or description is right here.
+    const confirmed = window.confirm(
+      `Create a live payment link for ${formatCurrency(Number(amount) || 0)} — "${description}" — ` +
+        `billed to ${lead.name}?\n\nThis immediately creates a real Razorpay link and Razorpay will SMS/email ` +
+        `${lead.name} about it right away — it can't be edited afterward.`
+    );
+    if (!confirmed) return;
+
     setCreating(true);
     onError(null);
     try {
