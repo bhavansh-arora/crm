@@ -39,10 +39,11 @@ export default function TimeTrackingClient() {
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500">
-          Time each rep had the CRM open and in the foreground, per day, based on a heartbeat
-          ping sent about once a minute. This measures time in the app -- not time on the phone
-          or doing other work away from the screen -- so treat it as a useful estimate, not an
-          exact timesheet.
+          Time each rep had the CRM open, in the foreground, and actually in use, per day, based
+          on a heartbeat ping sent about once a minute while there's recent mouse, keyboard, or
+          touch activity -- a tab left open on an unattended laptop stops counting after a few
+          minutes idle. This measures time in the app -- not time on the phone or doing other
+          work away from the screen -- so treat it as a useful estimate, not an exact timesheet.
         </p>
         <div className="flex shrink-0 gap-2">
           {RANGES.map((r) => (
