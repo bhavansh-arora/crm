@@ -55,8 +55,16 @@ services:
       # at reports.codebunny.net, with directory browsing so old runs stay
       # reachable without remembering their folder names.
       - /opt/lead-finder-cli/lead-finder/results:/srv/reports:ro
+      # Serves the static portfolio site at codebunny.net / www.codebunny.net
+      - /opt/portfolio:/srv/portfolio:ro
     depends_on:
       - app
+    networks:
+      - default
+      # Lets this container resolve/reach steam-ie-website-caddy-1 by name for
+      # the steamie.net / steam-ie.com reverse proxy -- without this, recreating
+      # this container drops that connection and those domains 502.
+      - steam-ie-website_default
 
 volumes:
   caddy-data:
@@ -64,3 +72,9 @@ volumes:
   postgres-data:
   uploads-data:
   invoices-data:
+
+networks:
+  default:
+    name: crm_default
+  steam-ie-website_default:
+    external: true
