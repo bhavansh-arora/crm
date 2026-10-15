@@ -13,16 +13,18 @@ export default async function AppShell({ children }: { children: React.ReactNode
   const invoicesSite = isInvoicesHost((await headers()).get("host"));
 
   return (
-    <div className="min-h-screen pb-16 md:pb-0">
+    <div className="min-h-screen bg-slate-50 pb-16 md:pb-0">
       <Nav
         name={session.user.name ?? session.user.email ?? "User"}
         role={session.user.role}
         invoicesSite={invoicesSite}
       />
-      <main className="mx-auto max-w-6xl px-4 py-6">
-        <HeartbeatPing />
-        {!invoicesSite && <FollowUpNotifications />}
-        {children}
+      <main className="md:pl-64">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <HeartbeatPing />
+          {!invoicesSite && <FollowUpNotifications />}
+          {children}
+        </div>
       </main>
     </div>
   );

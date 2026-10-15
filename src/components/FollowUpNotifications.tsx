@@ -84,7 +84,7 @@ export default function FollowUpNotifications() {
   if (permission !== "default") return null;
 
   return (
-    <div className="mx-auto mb-4 flex max-w-6xl items-center justify-between gap-3 rounded-lg bg-brand-50 px-4 py-2.5 text-sm text-brand-800 ring-1 ring-brand-200">
+    <div className="mb-4 flex items-center justify-between gap-3 rounded-lg bg-brand-50 px-4 py-2.5 text-sm text-brand-800 ring-1 ring-brand-200">
       <span>Turn on browser notifications to get alerted here when a follow-up is due.</span>
       <button
         onClick={() => Notification.requestPermission().then(setPermission)}
