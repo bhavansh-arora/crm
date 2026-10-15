@@ -12,6 +12,11 @@ services:
       # Postgres 18's image expects the volume at the parent directory (not
       # .../data directly) -- it manages a versioned subdirectory itself.
       - postgres-data:/var/lib/postgresql
+    # Keeps this memory available under system-wide pressure (e.g. from the
+    # memory-hungry voice-speech service sharing this VPS) instead of being
+    # reclaimed first just because it's not the biggest consumer at that
+    # moment -- a soft floor, not a hard cap on how much it can actually use.
+    mem_reservation: 100m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U crm"]
       interval: 5s
@@ -29,6 +34,7 @@ services:
       - uploads-data:/app/uploads
       # Invoice PDFs + monthly/yearly register CSVs (see src/lib/invoices.ts)
       - invoices-data:/app/invoices
+    mem_reservation: 200m
     expose:
       - "3000"
 
@@ -57,6 +63,7 @@ services:
       - /opt/lead-finder-cli/lead-finder/results:/srv/reports:ro
       # Serves the static portfolio site at codebunny.net / www.codebunny.net
       - /opt/portfolio:/srv/portfolio:ro
+    mem_reservation: 50m
     depends_on:
       - app
     networks:
