@@ -92,11 +92,26 @@ export async function GET(req: NextRequest) {
           take: 1,
           select: { id: true, dueAt: true },
         },
+        // Most recent activity that actually has note text (a dedicated
+        // note, or a call logged with one) - shown as a preview in the
+        // leads list so you don't have to open a lead to see what was last
+        // said about it.
+        activities: {
+          where: { note: { not: null } },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { note: true, createdAt: true },
+        },
       },
       orderBy,
     });
 
-    return NextResponse.json({ leads });
+    const leadsWithLatestNote = leads.map(({ activities, ...lead }) => ({
+      ...lead,
+      latestNote: activities[0] ?? null,
+    }));
+
+    return NextResponse.json({ leads: leadsWithLatestNote });
   } catch (error) {
     return handleApiError(error);
   }

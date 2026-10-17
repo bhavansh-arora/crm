@@ -348,6 +348,11 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
                   )}
                   <span className="ml-auto">Updated {relativeTime(lead.updatedAt)}</span>
                 </div>
+                {lead.latestNote && (
+                  <p className="mt-2 truncate text-xs text-slate-500">
+                    📝 {lead.latestNote.note}
+                  </p>
+                )}
               </Link>
             </div>
           );

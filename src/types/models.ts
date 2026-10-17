@@ -39,6 +39,7 @@ export type LeadListItem = {
   assignedTo: UserSummary | null;
   _count: { activities: number; followUps: number };
   followUps: { id: string; dueAt: string }[];
+  latestNote: { note: string; createdAt: string } | null;
 };
 
 export type Activity = {
