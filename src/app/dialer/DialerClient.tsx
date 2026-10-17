@@ -8,8 +8,15 @@ import { formatCurrency, relativeTime, nowForDateTimeLocalInput } from "@/lib/fo
 import StatusBadge from "@/components/StatusBadge";
 import TemperatureBadge from "@/components/TemperatureBadge";
 import { CallWhatsAppButtons, CompanyWebsiteEditor } from "@/app/leads/[id]/LeadDetailClient";
-import { OPEN_STATUSES, CALL_OUTCOMES, CALL_OUTCOME_LABELS, type CallOutcomeValue } from "@/lib/constants";
-import type { LeadListItem } from "@/types/models";
+import {
+  OPEN_STATUSES,
+  CALL_OUTCOMES,
+  CALL_OUTCOME_LABELS,
+  LEAD_TEMPERATURES,
+  LEAD_TEMPERATURE_LABELS,
+  type CallOutcomeValue,
+} from "@/lib/constants";
+import type { LeadListItem, LeadDetail } from "@/types/models";
 
 const SORT_OPTIONS = [
   { value: "stale_first", label: "Longest since status change" },
@@ -49,6 +56,27 @@ export default function DialerClient() {
   const sources = Array.from(sourceCounts.keys()).sort();
   const queue = source ? openLeads.filter((l) => l.source === source) : openLeads;
   const current = queue[index];
+
+  async function changeTemperature(temperature: string) {
+    if (!current) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiRequest<{ lead: LeadDetail }>(`/api/leads/${current.id}`, "PATCH", {
+        temperature: temperature || null,
+      });
+      mutate((prev) => {
+        if (!prev) return prev;
+        return {
+          leads: prev.leads.map((l) => (l.id === current.id ? { ...l, temperature: res.lead.temperature } : l)),
+        };
+      }, { revalidate: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update temperature");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   function resetForm() {
     setOutcome("");
@@ -243,6 +271,23 @@ export default function DialerClient() {
             )}
 
             <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-500">Temperature</label>
+                <select
+                  aria-label="Lead temperature"
+                  value={current.temperature || ""}
+                  disabled={saving}
+                  onChange={(e) => changeTemperature(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="">Not set</option>
+                  {LEAD_TEMPERATURES.map((t) => (
+                    <option key={t} value={t}>
+                      {LEAD_TEMPERATURE_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-slate-500">Call outcome</label>
                 <select
