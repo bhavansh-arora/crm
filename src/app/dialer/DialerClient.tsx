@@ -91,6 +91,22 @@ export default function DialerClient() {
     setIndex((i) => i + 1);
   }
 
+  /** Logs whatever outcome/note is currently filled in, if any - shared by logAndNext and markLost. */
+  async function logOutcomeIfAny(leadId: string) {
+    if (outcome) {
+      await apiRequest(`/api/leads/${leadId}/activities`, "POST", {
+        type: "CALL",
+        callOutcome: outcome,
+        note: note.trim() || undefined,
+      });
+    } else if (note.trim()) {
+      await apiRequest(`/api/leads/${leadId}/activities`, "POST", {
+        type: "NOTE",
+        note: note.trim(),
+      });
+    }
+  }
+
   async function logAndNext() {
     if (!current) return;
     if (followUpDate && followUpDate < nowForDateTimeLocalInput()) {
@@ -100,18 +116,7 @@ export default function DialerClient() {
     setSaving(true);
     setError(null);
     try {
-      if (outcome) {
-        await apiRequest(`/api/leads/${current.id}/activities`, "POST", {
-          type: "CALL",
-          callOutcome: outcome,
-          note: note.trim() || undefined,
-        });
-      } else if (note.trim()) {
-        await apiRequest(`/api/leads/${current.id}/activities`, "POST", {
-          type: "NOTE",
-          note: note.trim(),
-        });
-      }
+      await logOutcomeIfAny(current.id);
       if (followUpDate) {
         await apiRequest(`/api/leads/${current.id}/followups`, "POST", {
           dueAt: new Date(followUpDate).toISOString(),
@@ -121,6 +126,22 @@ export default function DialerClient() {
       next();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function markLost() {
+    if (!current) return;
+    if (!confirm(`Mark ${current.name} as Lost?`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await logOutcomeIfAny(current.id);
+      await apiRequest(`/api/leads/${current.id}`, "PATCH", { status: "LOST" });
+      next();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to mark lead as lost");
     } finally {
       setSaving(false);
     }
@@ -353,6 +374,13 @@ export default function DialerClient() {
                 className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
               >
                 Skip
+              </button>
+              <button
+                onClick={markLost}
+                disabled={saving}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-rose-600 ring-1 ring-rose-200 hover:bg-rose-50 disabled:opacity-60"
+              >
+                Mark as Lost
               </button>
             </div>
           </div>
