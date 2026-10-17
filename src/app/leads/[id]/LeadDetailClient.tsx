@@ -53,6 +53,7 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
 
   if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
   if (error || !data?.lead) {
@@ -417,9 +418,32 @@ export default function LeadDetailClient({ leadId }: { leadId: string }) {
                 )}
                 <span className="text-xs text-slate-400">
                   {a.user?.name || "Unknown"} · {formatDateTime(a.createdAt)} ({relativeTime(a.createdAt)})
+                  {a.editedAt && <span className="italic"> · edited</span>}
                 </span>
+                {a.note && editingActivityId !== a.id && (
+                  <button
+                    onClick={() => setEditingActivityId(a.id)}
+                    className="text-xs font-medium text-brand-600 hover:underline"
+                  >
+                    Edit
+                  </button>
+                )}
               </div>
-              {a.note && <p className="mt-1 text-sm text-slate-600">{a.note}</p>}
+              {editingActivityId === a.id ? (
+                <ActivityNoteEditor
+                  leadId={leadId}
+                  activityId={a.id}
+                  initialNote={a.note || ""}
+                  onDone={() => {
+                    setEditingActivityId(null);
+                    mutate();
+                  }}
+                  onCancel={() => setEditingActivityId(null)}
+                  onError={setFormError}
+                />
+              ) : (
+                a.note && <p className="mt-1 text-sm text-slate-600">{a.note}</p>
+              )}
             </li>
           ))}
         </ul>
@@ -547,6 +571,66 @@ function NoteForm({
       >
         {loading ? "Saving…" : "Save note"}
       </button>
+    </div>
+  );
+}
+
+function ActivityNoteEditor({
+  leadId,
+  activityId,
+  initialNote,
+  onDone,
+  onCancel,
+  onError,
+}: {
+  leadId: string;
+  activityId: string;
+  initialNote: string;
+  onDone: () => void;
+  onCancel: () => void;
+  onError: (msg: string | null) => void;
+}) {
+  const [note, setNote] = useState(initialNote);
+  const [loading, setLoading] = useState(false);
+
+  async function submit() {
+    setLoading(true);
+    onError(null);
+    try {
+      await apiRequest(`/api/leads/${leadId}/activities/${activityId}`, "PATCH", { note });
+      onDone();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to update note");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="mt-1 space-y-2 rounded-lg bg-slate-50 p-3">
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        rows={3}
+        autoFocus
+        className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+      />
+      <div className="flex gap-2">
+        <button
+          onClick={submit}
+          disabled={loading}
+          className="rounded-lg bg-brand-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-700 disabled:opacity-60"
+        >
+          {loading ? "Saving…" : "Save"}
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={loading}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 hover:bg-slate-100"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

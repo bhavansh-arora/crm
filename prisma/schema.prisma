@@ -108,7 +108,10 @@ model Activity {
   toStatus   String?
 
   note      String?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  // Set when the note text is edited after creation, so the timeline can
+  // show "(edited)" rather than silently rewriting history.
+  editedAt  DateTime?
 
   @@index([leadId])
 }

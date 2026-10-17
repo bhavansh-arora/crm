@@ -50,6 +50,7 @@ export type Activity = {
   fromStatus: LeadStatusValue | null;
   toStatus: LeadStatusValue | null;
   createdAt: string;
+  editedAt: string | null;
   user: UserSummary | null;
 };
 
