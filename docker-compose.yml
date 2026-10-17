@@ -63,6 +63,9 @@ services:
       - /opt/lead-finder-cli/lead-finder/results:/srv/reports:ro
       # Serves the static portfolio site at codebunny.net / www.codebunny.net
       - /opt/portfolio:/srv/portfolio:ro
+      # Serves the VINC Lab LMS static site at lms.vinc-lab.com (static
+      # HTML/CSS/JS, no build/server - see bhavansh-arora/vinc-lms)
+      - /opt/vinc-lms:/srv/vinc-lms:ro
     mem_reservation: 50m
     depends_on:
       - app
