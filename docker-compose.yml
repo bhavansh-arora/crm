@@ -12,6 +12,14 @@ services:
       # Postgres 18's image expects the volume at the parent directory (not
       # .../data directly) -- it manages a versioned subdirectory itself.
       - postgres-data:/var/lib/postgresql
+    # Localhost-only (not 0.0.0.0) - lets other apps/containers on this VPS
+    # reach this same Postgres instance at 127.0.0.1:5432 (or
+    # host.docker.internal:5432 from inside another container) for their own
+    # databases, without exposing Postgres to the internet. First consumer:
+    # vinc-lms's own database, created alongside crm's rather than running a
+    # second Postgres container just for it.
+    ports:
+      - "127.0.0.1:5432:5432"
     # Keeps this memory available under system-wide pressure (e.g. from the
     # memory-hungry voice-speech service sharing this VPS) instead of being
     # reclaimed first just because it's not the biggest consumer at that
