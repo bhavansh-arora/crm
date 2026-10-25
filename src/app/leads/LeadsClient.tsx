@@ -150,12 +150,20 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
           )}
         </h1>
         {isAdmin && (
-          <Link
-            href="/leads/new"
-            className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
-          >
-            + New Lead
-          </Link>
+          <div className="flex gap-2">
+            <a
+              href={`/api/leads/export?${searchParams.toString()}`}
+              className="inline-flex items-center justify-center rounded-lg bg-white px-4 py-2 text-sm font-medium text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+            >
+              Export CSV
+            </a>
+            <Link
+              href="/leads/new"
+              className="inline-flex items-center justify-center rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+            >
+              + New Lead
+            </Link>
+          </div>
         )}
       </div>
 
