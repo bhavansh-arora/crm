@@ -21,11 +21,22 @@ textarea {
   @apply outline-none;
 }
 
-/* Every <select>'s own right-padding utility (px-2/px-3/...) has equal
+/* The browser's own dropdown arrow sits a near-fixed distance from the
+   border regardless of padding -- padding only moves the selected text,
+   not the arrow itself -- so on every <select> we draw our own arrow
+   (positioned exactly where we want it) and turn the native one off.
+   Every <select>'s own right-padding utility (px-2/px-3/...) has equal
    specificity to this, so without !important whichever rule happens to
-   come later in the stylesheet would win arbitrarily -- the native dropdown
-   arrow needs reliably more room from the border than left-side padding
-   does, so this is pinned regardless of each select's own px-* class. */
+   come later in the stylesheet would win arbitrarily -- the arrow needs
+   reliably more room from the border than left-side padding does, so
+   this is pinned regardless of each select's own px-* class. */
 select {
-  padding-right: 2rem !important;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2364748b' stroke-width='1.5'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 1.1em 1.1em;
+  padding-right: 2.25rem !important;
 }
