@@ -1,17 +1,22 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, handleApiError } from "@/lib/api-auth";
 import { LEAD_STATUSES, LEAD_TEMPERATURES, type LeadStatusValue, type LeadTemperatureValue } from "@/lib/constants";
 
-// Admins get the whole team's numbers; sales reps get this same shape scoped
-// to just their own leads, for a personal dashboard -- so "reps" comes back
-// empty and unassignedUncontactedLeads stays 0 for a rep (everything in
-// their own scope is, by definition, assigned to them).
-export async function GET() {
+// Admins get the whole team's numbers, or -- by passing ?repId=<userId> --
+// the same shape scoped to one rep's leads, so an admin can see any rep's
+// dashboard exactly as that rep sees it. A sales rep's own dashboard is
+// always scoped to just their own leads regardless of ?repId (a rep can't
+// use it to view a teammate's numbers). In either single-rep case "reps"
+// comes back empty and unassignedUncontactedLeads stays 0, same as a rep's
+// own personal dashboard (everything in scope is, by definition, assigned
+// to that one person).
+export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
     const isAdmin = session.user.role === "ADMIN";
-    const leadWhere = isAdmin ? {} : { assignedToId: session.user.id };
+    const repId = isAdmin ? req.nextUrl.searchParams.get("repId") : null;
+    const leadWhere = isAdmin ? (repId ? { assignedToId: repId } : {}) : { assignedToId: session.user.id };
 
     const leads = await prisma.lead.findMany({
       where: leadWhere,
@@ -140,7 +145,7 @@ export async function GET() {
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    const followUpLeadFilter = isAdmin ? {} : { lead: { assignedToId: session.user.id } };
+    const followUpLeadFilter = { lead: leadWhere };
     const upcomingFollowUps = await prisma.followUp.count({
       where: { completed: false, dueAt: { gte: new Date() }, ...followUpLeadFilter },
     });

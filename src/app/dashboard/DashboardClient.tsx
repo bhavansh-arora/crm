@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { fetcher } from "@/lib/fetcher";
@@ -12,6 +13,7 @@ import {
   type LeadStatusValue,
   type LeadTemperatureValue,
 } from "@/lib/constants";
+import type { TeamMember } from "@/types/models";
 
 type DashboardStats = {
   totalLeads: number;
@@ -42,17 +44,48 @@ type DashboardStats = {
 };
 
 export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
-  const { data, isLoading } = useSWR<DashboardStats>("/api/dashboard", fetcher);
+  const [repId, setRepId] = useState("");
+  const { data, isLoading } = useSWR<DashboardStats>(
+    `/api/dashboard${repId ? `?repId=${repId}` : ""}`,
+    fetcher
+  );
+  const { data: teamData } = useSWR<{ users: TeamMember[] }>(isAdmin ? "/api/users" : null, fetcher);
+  const reps = (teamData?.users || []).filter((u) => u.role === "SALES_REP" && u.active);
+  const viewingRep = repId ? reps.find((r) => r.id === repId) : null;
 
   if (isLoading || !data) return <p className="text-sm text-slate-500">Loading dashboard…</p>;
 
+  // Looking at one rep's numbers (whether that's an admin picking a rep, or
+  // a rep viewing their own dashboard) uses the same personal-dashboard
+  // framing as the non-admin view below -- only a true team-wide admin view
+  // gets the "whole team" framing (unassigned count, team activity link,
+  // per-rep breakdown table).
+  const scopedToOnePerson = !isAdmin || !!repId;
   const maxStatusCount = Math.max(1, ...LEAD_STATUSES.map((s) => data.byStatus[s].count));
-  const uncontactedCount = isAdmin ? data.unassignedUncontactedLeads : data.byStatus.NEW.count;
-  const prefix = isAdmin ? "" : "My ";
+  const uncontactedCount = scopedToOnePerson ? data.byStatus.NEW.count : data.unassignedUncontactedLeads;
+  const prefix = scopedToOnePerson ? (viewingRep ? `${viewingRep.name}'s ` : "My ") : "";
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold text-slate-900">{isAdmin ? "Dashboard" : "My Dashboard"}</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-semibold text-slate-900">
+          {viewingRep ? `${viewingRep.name}'s Dashboard` : isAdmin ? "Dashboard" : "My Dashboard"}
+        </h1>
+        {isAdmin && (
+          <select
+            value={repId}
+            onChange={(e) => setRepId(e.target.value)}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">Whole team</option>
+            {reps.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label={`${prefix}Revenue Won`} value={formatCurrency(data.totalRevenue)} accent="emerald" />
@@ -65,15 +98,19 @@ export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
 
       {uncontactedCount > 0 && (
         <Link
-          href={isAdmin ? "/leads?assignedToId=unassigned&status=NEW" : "/leads?status=NEW"}
+          href={
+            scopedToOnePerson
+              ? `/leads?status=NEW${repId ? `&assignedToId=${repId}` : ""}`
+              : "/leads?assignedToId=unassigned&status=NEW"
+          }
           className="flex items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800 ring-1 ring-amber-100 hover:ring-amber-300"
         >
           <span className="font-medium">
-            🆕 {isAdmin ? "New, uncontacted, and unassigned" : "New leads in your kitty"}
+            🆕 {scopedToOnePerson ? (viewingRep ? `${viewingRep.name}'s new leads` : "New leads in your kitty") : "New, uncontacted, and unassigned"}
           </span>
           <span>
             {uncontactedCount} lead{uncontactedCount !== 1 ? "s" : ""}{" "}
-            {isAdmin ? "waiting to be assigned to a rep" : "not yet contacted"}
+            {scopedToOnePerson ? "not yet contacted" : "waiting to be assigned to a rep"}
           </span>
           <span aria-hidden="true">→</span>
         </Link>
@@ -95,10 +132,12 @@ export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
         )}
 
         <Link
-          href={isAdmin ? "/activity" : "/leads"}
+          href={!isAdmin ? "/leads" : repId ? `/leads?assignedToId=${repId}` : "/activity"}
           className="flex items-center justify-between rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 hover:ring-brand-300"
         >
-          <span className="text-sm font-medium text-slate-700">{isAdmin ? "📈 Team activity" : "🗂️ My leads"}</span>
+          <span className="text-sm font-medium text-slate-700">
+            {scopedToOnePerson ? (viewingRep ? `🗂️ ${viewingRep.name}'s leads` : "🗂️ My leads") : "📈 Team activity"}
+          </span>
           <span className="text-sm text-slate-500">
             {data.newLeadsToday} new lead{data.newLeadsToday !== 1 ? "s" : ""} today
           </span>
@@ -147,7 +186,7 @@ export default function DashboardClient({ isAdmin }: { isAdmin: boolean }) {
       </div>
 
       {/* Revenue by rep */}
-      {isAdmin && (
+      {isAdmin && !repId && (
       <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <h2 className="mb-4 font-semibold text-slate-900">Revenue by Sales Rep</h2>
         {data.reps.length === 0 && <p className="text-sm text-slate-400">No leads assigned yet.</p>}

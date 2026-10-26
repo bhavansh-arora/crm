@@ -313,12 +313,12 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid min-w-0 grid-cols-1 gap-3">
         {leads.map((lead) => {
           const nextFollowUp = lead.followUps[0];
           const overdue = nextFollowUp && new Date(nextFollowUp.dueAt).getTime() < Date.now();
           return (
-            <div key={lead.id} className="flex items-start gap-2">
+            <div key={lead.id} className="flex min-w-0 items-start gap-2">
               {isAdmin && (
                 <input
                   type="checkbox"
@@ -329,7 +329,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
               )}
               <Link
                 href={`/leads/${lead.id}`}
-                className="block flex-1 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300"
+                className="block min-w-0 flex-1 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 transition hover:ring-brand-300"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -357,7 +357,7 @@ export default function LeadsClient({ isAdmin }: { isAdmin: boolean }) {
                   <span className="ml-auto">Updated {relativeTime(lead.updatedAt)}</span>
                 </div>
                 {lead.latestNote && (
-                  <p className="mt-2 whitespace-pre-wrap break-words text-xs text-slate-500">
+                  <p className="mt-2 whitespace-pre-wrap break-all text-xs text-slate-500">
                     📝 {lead.latestNote.note}
                   </p>
                 )}
