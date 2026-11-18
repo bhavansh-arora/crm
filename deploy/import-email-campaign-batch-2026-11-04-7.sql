@@ -1,7 +1,8 @@
 -- One-off import: 1 lead from an email outreach conversation. Lead source
 -- "Email Campaign", assigned to Shugofta (cmuf554b7007iixqkmf2wi80u),
--- status "NEW". website is our preview (dancecart.codebunny.net), not her
--- own WordPress site, matching the established convention.
+-- status "NEW", temperature "HOT" (she said the timing was right).
+-- website is our preview (dancecart.codebunny.net), not her own WordPress
+-- site, matching the established convention.
 --
 -- Run INTERACTIVELY (not piped with -f/<) so you can review the row it's
 -- about to insert before committing:
@@ -20,11 +21,11 @@ ON CONFLICT (name) DO NOTHING;
 
 WITH source (name, company, email, phone, website, note) AS (
   VALUES
-    ('Amy Kirwan', 'Dance Cart', 'amy@dancecart.com.au', '+61438739709', 'https://dancecart.codebunny.net/', 'Cold email to Dance Cart (curriculum-aligned school dance programs). Amy (Director) is reviewing and simplifying her WordPress site, so the timing was good. Asked how a course catalogue/enrolment/payment system would work with her site, plus company info, past work and costs. Sent a preview and answers on 4 Nov -- no reply yet.')
+    ('Amy Kirwan', 'Dance Cart', 'amy@dancecart.com.au', '+61438739709', 'https://dancecart.codebunny.net/', 'Cold email from Christa (Code Bunny) to Dance Cart (curriculum-aligned school dance programs). Amy (Director) said the timing was good -- she''s reviewing and simplifying her WordPress site. Asked how a course catalogue/enrolment/payment system would work with her site, plus company info, past work and costs. Christa sent a preview and answers on 4 Nov -- no reply yet.')
 ),
 inserted_leads AS (
-  INSERT INTO "Lead" (id, name, company, email, phone, website, source, status, "assignedToId", "createdAt", "updatedAt")
-  SELECT gen_random_uuid()::text, s.name, s.company, s.email, s.phone, s.website, 'Email Campaign', 'NEW', 'cmuf554b7007iixqkmf2wi80u', now(), now()
+  INSERT INTO "Lead" (id, name, company, email, phone, website, source, status, temperature, "assignedToId", "createdAt", "updatedAt")
+  SELECT gen_random_uuid()::text, s.name, s.company, s.email, s.phone, s.website, 'Email Campaign', 'NEW', 'HOT', 'cmuf554b7007iixqkmf2wi80u', now(), now()
   FROM source s
   WHERE NOT EXISTS (
     SELECT 1 FROM "Lead" l
